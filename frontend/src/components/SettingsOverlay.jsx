@@ -15,6 +15,7 @@
  */
 
 import React from "react"
+import { playBlip } from "../utils/audio-blip"
 
 // Fullscreen developer settings: theme color, LLM endpoint/model/key,
 // keyboard mode, TTS toggle, visualizer density, and system volume
@@ -26,6 +27,15 @@ export default function SettingsOverlay({
   setConfig,
   onTestConnection,
 }) {
+  const LANGUAGE_OPTIONS = [
+    { code: "zh", name: "Chinese" },
+    { code: "en", name: "English" },
+    { code: "ar", name: "Arabic" },
+    { code: "es", name: "Spanish" },
+    { code: "ja", name: "Japanese" },
+    { code: "ko", name: "Korean" },
+  ];
+
   const THEME_COLORS = [
     { name: "RED", value: "#ff4444" },
     { name: "WHITE", value: "#ffffff" },
@@ -36,6 +46,21 @@ export default function SettingsOverlay({
   ];
 
   const [systemVolume, setSystemVolume] = React.useState(null);
+  const [languageStatus, setLanguageStatus] = React.useState({});
+
+  const refreshLanguageStatus = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/languages', { cache: 'no-store' });
+      const data = await res.json();
+      const nextStatus = {};
+      for (const language of data.languages || []) {
+        nextStatus[language.code] = language.status;
+      }
+      setLanguageStatus(nextStatus);
+    } catch (e) {
+      console.error("Failed to fetch languages", e);
+    }
+  }, []);
 
   React.useEffect(() => {
     if (isActive) {
@@ -47,14 +72,55 @@ export default function SettingsOverlay({
           }
         })
         .catch((e) => console.error("Failed to fetch volume", e));
+      refreshLanguageStatus();
     }
-  }, [isActive]);
+  }, [isActive, refreshLanguageStatus]);
+
+  React.useEffect(() => {
+    if (!isActive) return undefined;
+    const timer = window.setInterval(refreshLanguageStatus, 300);
+    return () => window.clearInterval(timer);
+  }, [isActive, refreshLanguageStatus]);
 
   if (!isActive) return null
 
   const handleChange = (key, value) => {
     setConfig((prev) => ({ ...prev, [key]: value }))
   }
+
+  const prepareLanguages = async (languages) => {
+    try {
+      const res = await fetch('/api/languages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ languages }),
+      });
+      const data = await res.json();
+      const nextStatus = {};
+      for (const language of data.languages || []) {
+        nextStatus[language.code] = language.status;
+      }
+      setLanguageStatus(nextStatus);
+      window.setTimeout(refreshLanguageStatus, 1200);
+    } catch (e) {
+      console.error("Failed to prepare languages", e);
+    }
+  }
+
+  const handleLanguageChange = (key, value) => {
+    const next = { ...config, [key]: value };
+    if (key === "lane1Language" && value === config.lane2Language) {
+      next.lane2Language = config.lane1Language;
+    }
+    if (key === "lane2Language" && value === config.lane1Language) {
+      next.lane1Language = config.lane2Language;
+    }
+    setConfig(next)
+    prepareLanguages([next.lane1Language, next.lane2Language]);
+  }
+
+  const languageNameFor = (code) =>
+    LANGUAGE_OPTIONS.find((language) => language.code === code)?.name || code;
 
   const handleVolumeChange = async (action) => {
     try {
@@ -67,8 +133,17 @@ export default function SettingsOverlay({
       if (data.volume !== undefined && data.volume !== null) {
         setSystemVolume(data.volume);
       }
+      playBlip("ping");
     } catch (e) {
       console.error('Failed to change volume:', e);
+    }
+  }
+
+  const handleExitApp = async () => {
+    try {
+      await fetch('/api/kiosk/exit', { method: 'POST' });
+    } catch (e) {
+      console.error('Failed to exit app:', e);
     }
   }
 
@@ -104,6 +179,57 @@ export default function SettingsOverlay({
             >
               +
             </button>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>Languages</label>
+          <div className="language-select-row">
+            <select
+              value={config.lane1Language}
+              onChange={(e) => handleLanguageChange("lane1Language", e.target.value)}
+            >
+              {LANGUAGE_OPTIONS.map((language) => (
+                <option key={language.code} value={language.code}>
+                  1 · {language.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={config.lane2Language}
+              onChange={(e) => handleLanguageChange("lane2Language", e.target.value)}
+            >
+              {LANGUAGE_OPTIONS.map((language) => (
+                <option key={language.code} value={language.code}>
+                  2 · {language.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="language-progress-list">
+            {[config.lane1Language, config.lane2Language].map((code) => {
+              const current = languageStatus[code] || {};
+              const status = current.status || "not-installed";
+              const progress = Number.isFinite(current.progress) ? current.progress : 0;
+              const stage = current.stage || status;
+              return (
+                <div key={code} className="language-progress-item">
+                  <div className="language-progress-meta">
+                    <span>{code.toUpperCase()} · {languageNameFor(code)}</span>
+                    <span>{status === "ready" ? "100%" : `${progress}%`}</span>
+                  </div>
+                  <div className={`language-progress-track ${status}`}>
+                    <div
+                      className="language-progress-fill"
+                      style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+                    />
+                  </div>
+                  <div className="language-progress-stage">
+                    {stage}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
@@ -212,6 +338,10 @@ export default function SettingsOverlay({
             </div>
           </div>
         </div>
+
+        <button className="overlay-btn" onClick={handleExitApp}>
+          Exit App
+        </button>
       </div>
     </div>
   )

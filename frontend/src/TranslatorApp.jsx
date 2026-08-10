@@ -32,15 +32,20 @@ import { playBlip } from "./utils/audio-blip"
 
 // Languages offered on each lane's revolver; ttsLang selects the backend voice.
 const AVAILABLE_LANGUAGES = [
-  { code: "ar", name: "Arabic", voice: "tts", ttsLang: "ar" },
+  { code: "zh", name: "Chinese", voice: "tts", ttsLang: "zh" },
   { code: "en", name: "English", voice: "tts", ttsLang: "en" },
+  { code: "ar", name: "Arabic", voice: "tts", ttsLang: "ar" },
   { code: "es", name: "Spanish", voice: "tts", ttsLang: "es" },
   { code: "ja", name: "Japanese", voice: "tts", ttsLang: "ja" },
-  { code: "zh", name: "Chinese", voice: "tts", ttsLang: "zh" },
   { code: "ko", name: "Korean", voice: "tts", ttsLang: "ko" },
 ]
 
-function TranslatorApp({ config }) {
+const languageIndexFor = (code, fallbackIndex) => {
+  const index = AVAILABLE_LANGUAGES.findIndex((language) => language.code === code)
+  return index >= 0 ? index : fallbackIndex
+}
+
+function TranslatorApp({ config, setConfig }) {
   // UI State
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [activePerson, setActivePerson] = useState(1)
@@ -60,9 +65,18 @@ function TranslatorApp({ config }) {
   const onlineAudioPlayerRef = useRef(null)
 
   // Language Lanes State
-  const [lang1Index, setLang1Index] = useState(0)
-  const [lang2Index, setLang2Index] = useState(1)
+  const [lang1Index, setLang1Index] = useState(() =>
+    languageIndexFor(config.lane1Language, 0),
+  )
+  const [lang2Index, setLang2Index] = useState(() =>
+    languageIndexFor(config.lane2Language, 1),
+  )
   const [activeLaneRecording, setActiveLaneRecording] = useState(null) // 1 or 2
+  const activeLaneRecordingRef = useRef(null)
+  const hardwareButtonPressedRef = useRef(false)
+  const lang1IndexRef = useRef(lang1Index)
+  const lang2IndexRef = useRef(lang2Index)
+  const configRef = useRef(config)
 
   const { isRecording, startRecording, stopRecording, analyser, micError } =
     useAudioRecorder()
@@ -77,6 +91,32 @@ function TranslatorApp({ config }) {
       })
     }
   }, [micError])
+
+  useEffect(() => {
+    setLang1Index(languageIndexFor(config.lane1Language, 0))
+  }, [config.lane1Language])
+
+  useEffect(() => {
+    setLang2Index(languageIndexFor(config.lane2Language, 1))
+  }, [config.lane2Language])
+
+  useEffect(() => {
+    lang1IndexRef.current = lang1Index
+  }, [lang1Index])
+
+  useEffect(() => {
+    lang2IndexRef.current = lang2Index
+  }, [lang2Index])
+
+  useEffect(() => {
+    configRef.current = config
+  }, [config])
+
+  useEffect(() => {
+    const preventContextMenu = (e) => e.preventDefault()
+    window.addEventListener("contextmenu", preventContextMenu)
+    return () => window.removeEventListener("contextmenu", preventContextMenu)
+  }, [])
 
   const stopSpeaking = useCallback(() => {
     if (onlineAudioPlayerRef.current) {
@@ -139,60 +179,82 @@ function TranslatorApp({ config }) {
         let ni = (lang1Index + direction + N) % N
         if (ni === lang2Index) ni = (ni + direction + N) % N
         setLang1Index(ni)
+        lang1IndexRef.current = ni
+        configRef.current = {
+          ...configRef.current,
+          lane1Language: AVAILABLE_LANGUAGES[ni].code,
+        }
+        setConfig?.((prev) => ({ ...prev, lane1Language: AVAILABLE_LANGUAGES[ni].code }))
       } else {
         let ni = (lang2Index + direction + N) % N
         if (ni === lang1Index) ni = (ni + direction + N) % N
         setLang2Index(ni)
+        lang2IndexRef.current = ni
+        configRef.current = {
+          ...configRef.current,
+          lane2Language: AVAILABLE_LANGUAGES[ni].code,
+        }
+        setConfig?.((prev) => ({ ...prev, lane2Language: AVAILABLE_LANGUAGES[ni].code }))
       }
     },
-    [lang1Index, lang2Index, isRecording],
+    [lang1Index, lang2Index, isRecording, setConfig],
   )
 
   // Recording triggers
   const handleRecordStart = useCallback(
     async (lane) => {
-      if (isRecording) return
       stopSpeaking()
 
       setActivePerson((prev) => {
         if (prev !== lane) playBlip("speaker")
         return lane
       })
-      setActiveLaneRecording(lane)
-      playBlip("ping")
 
       const ok = await startRecording()
-      if (!ok) {
+      if (ok) {
+        activeLaneRecordingRef.current = lane
+        setActiveLaneRecording(lane)
+        playBlip("ping")
+      } else {
+        activeLaneRecordingRef.current = null
         setActiveLaneRecording(null)
       }
     },
-    [isRecording, stopSpeaking, startRecording],
+    [stopSpeaking, startRecording],
   )
 
   const handleRecordStop = useCallback(async () => {
-    if (!isRecording) return
-
-    const recordedLane = activeLaneRecording
+    const recordedLane = activeLaneRecordingRef.current
+    activeLaneRecordingRef.current = null
     setActiveLaneRecording(null)
     const audioData = await stopRecording()
 
-    if (audioData) {
+    if (audioData && recordedLane) {
       processTranslation(recordedLane, audioData.base64Data)
     }
-  }, [isRecording, activeLaneRecording, stopRecording])
+  }, [stopRecording])
 
   // Translation Pipeline
   const processTranslation = async (lane, base64Data) => {
     setIsDrawerOpen(true)
 
+    const currentConfig = configRef.current
+    const lane1Language =
+      AVAILABLE_LANGUAGES[
+        languageIndexFor(currentConfig.lane1Language, lang1IndexRef.current)
+      ]
+    const lane2Language =
+      AVAILABLE_LANGUAGES[
+        languageIndexFor(currentConfig.lane2Language, lang2IndexRef.current)
+      ]
     const src =
       lane === 1
-        ? AVAILABLE_LANGUAGES[lang1Index]
-        : AVAILABLE_LANGUAGES[lang2Index]
+        ? lane1Language
+        : lane2Language
     const dst =
       lane === 1
-        ? AVAILABLE_LANGUAGES[lang2Index]
-        : AVAILABLE_LANGUAGES[lang1Index]
+        ? lane2Language
+        : lane1Language
 
     setTranscriptionData({
       source: `${src.name} (Source)`,
@@ -220,15 +282,15 @@ function TranslatorApp({ config }) {
 
       // 2. Translation
       const result = await translateText(transcribedText, {
-        ...config,
-        modelName: config.modelName,
+        ...currentConfig,
+        modelName: currentConfig.modelName,
         systemPrompt: `You are a high-performance translator. Your task is to translate text from ${src.name.split(" ")[0]} into ${dst.name.split(" ")[0]}.\nYou MUST format your response as a valid JSON object matching this structure:\n{\n  "translation": "High-quality, natural translation into ${dst.name.split(" ")[0]}"\n}\nDo NOT return anything else except this JSON object. No Markdown block wraps (no \`\`\`json), no introductory text, no conversational text. Start directly with "{" and end directly with "}".`,
       })
 
       setTranslationData((prev) => ({ ...prev, text: result.translation }))
       setMetaText(`Duration: ${result.duration}s | Tokens: ${result.tokens}`)
 
-      if (config.enableTts) {
+      if (currentConfig.enableTts) {
         playTTS(result.translation, dst.ttsLang)
       }
     } catch (err) {
@@ -318,6 +380,46 @@ function TranslatorApp({ config }) {
     handleRotateLanguage,
   ])
 
+  // whisplay-plus hardware button support. The GPIO bridge writes button state
+  // for backend/server.py, and the kiosk UI translates it into the same
+  // push-to-talk actions used by the keyboard path.
+  useEffect(() => {
+    let cancelled = false
+    let unavailableCount = 0
+
+    const pollHardware = async () => {
+      try {
+        const res = await fetch("/api/hardware", { cache: "no-store" })
+        if (!res.ok) throw new Error(`hardware status ${res.status}`)
+        const state = await res.json()
+        if (!state.enabled || state.stale) return
+
+        unavailableCount = 0
+        const pressed = Boolean(state.buttonPressed)
+        if (pressed !== hardwareButtonPressedRef.current) {
+          hardwareButtonPressedRef.current = pressed
+          if (pressed) {
+            handleRecordStart(activePerson)
+          } else {
+            handleRecordStop()
+          }
+        }
+      } catch (err) {
+        unavailableCount += 1
+        if (unavailableCount === 1) {
+          console.debug("Hardware controls unavailable:", err)
+        }
+      } finally {
+        if (!cancelled) window.setTimeout(pollHardware, unavailableCount > 10 ? 1000 : 80)
+      }
+    }
+
+    pollHardware()
+    return () => {
+      cancelled = true
+    }
+  }, [activePerson, handleRecordStart, handleRecordStop])
+
   return (
     <div className="translator-envelope">
       <ResponseDrawer
@@ -331,6 +433,13 @@ function TranslatorApp({ config }) {
       />
 
       <main className="translator-workspace">
+        <Visualizer
+          activePerson={activePerson}
+          isRecording={isRecording}
+          analyser={analyser}
+          barsCount={parseInt(config.visualizerBars, 10)}
+        />
+
         <div className="languages-container">
           <LanguageLane
             laneId={1}
@@ -338,10 +447,11 @@ function TranslatorApp({ config }) {
             languages={AVAILABLE_LANGUAGES}
             currentIndex={lang1Index}
             isRecording={activeLaneRecording === 1}
-            isActivePerson={
-              config.keyboardMode === "landscape" && activePerson === 1
-            }
+            isActivePerson={activePerson === 1}
             onRotate={(dir) => handleRotateLanguage(1, dir)}
+            onSelect={() => setActivePerson(1)}
+            onPressStart={() => handleRecordStart(1)}
+            onPressEnd={handleRecordStop}
           />
           <LanguageLane
             laneId={2}
@@ -349,19 +459,13 @@ function TranslatorApp({ config }) {
             languages={AVAILABLE_LANGUAGES}
             currentIndex={lang2Index}
             isRecording={activeLaneRecording === 2}
-            isActivePerson={
-              config.keyboardMode === "landscape" && activePerson === 2
-            }
+            isActivePerson={activePerson === 2}
             onRotate={(dir) => handleRotateLanguage(2, dir)}
+            onSelect={() => setActivePerson(2)}
+            onPressStart={() => handleRecordStart(2)}
+            onPressEnd={handleRecordStop}
           />
         </div>
-
-        <Visualizer
-          activePerson={activePerson}
-          isRecording={isRecording}
-          analyser={analyser}
-          barsCount={parseInt(config.visualizerBars, 10)}
-        />
       </main>
     </div>
   )

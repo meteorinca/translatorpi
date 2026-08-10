@@ -27,6 +27,7 @@ export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false)
   const [micError, setMicError] = useState(null)
 
+  const isRecordingRef = useRef(false)
   const audioContextRef = useRef(null)
   const analyserRef = useRef(null)
   const sourceRef = useRef(null)
@@ -43,6 +44,7 @@ export function useAudioRecorder() {
   }, [])
 
   const startRecording = useCallback(async () => {
+    if (isRecordingRef.current) return false
     setMicError(null)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -76,6 +78,7 @@ export function useAudioRecorder() {
       source.connect(scriptProcessor)
       scriptProcessor.connect(audioContextRef.current.destination)
 
+      isRecordingRef.current = true
       setIsRecording(true)
       return true
     } catch (err) {
@@ -87,8 +90,9 @@ export function useAudioRecorder() {
   }, [])
 
   const stopRecording = useCallback(async () => {
-    if (!isRecording) return
+    if (!isRecordingRef.current) return
 
+    isRecordingRef.current = false
     setIsRecording(false)
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop())
@@ -136,7 +140,7 @@ export function useAudioRecorder() {
       console.error("Base64 encoding failed:", err)
       return null
     }
-  }, [isRecording])
+  }, [])
 
   return {
     isRecording,

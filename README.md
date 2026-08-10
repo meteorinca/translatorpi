@@ -73,6 +73,22 @@ To deploy as a permanent systemd kiosk service on a Raspberry Pi 5 (8GB):
 ```
 This automated script installs Debian audio/venv packages, sets up the Python environment, builds production UI assets, downloads the LiteRT model, registers the systemd unit from `deploy/gemma-translator.service`, and configures LXDE GUI autostart (`~/.config/lxsession/rpd-x/autostart`) to launch Chromium in kiosk mode pointing to `http://localhost:3000`.
 
+For whisplay-plus hardware (DSI display + touch, whisplay-sound sound card,
+one status LED, and one GPIO push-to-talk button), use:
+```bash
+./deploy-whisplay-plus.sh
+```
+The whisplay-plus deployment adds DSI-friendly Raspberry Pi display settings,
+selects a detected `whisplay` ALSA card as the default audio input/output,
+registers the base translator service, and installs
+`whisplay-plus-gpio.service`. The GPIO bridge maps the physical button to the
+existing `Z` push-to-talk key and drives the LED with an idle heartbeat/pressed
+state. Defaults live in `deploy/whisplay-plus.env` and are copied to
+`/etc/default/whisplay-plus-gpio` on the device; change the BCM GPIO numbers
+there if your board revision uses different pins. The default button is BOARD
+11 / BCM GPIO17; the default RGB LED lines are BOARD 22/18/16 / BCM
+GPIO25/24/23.
+
 ## Project Structure
 
 - `frontend/` - React (Vite) web frontend (`index.html`, `src/`, styles, and Vite configuration).

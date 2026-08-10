@@ -32,11 +32,13 @@
   margin: 0;
   padding: 0;
   user-select: none;
+  -webkit-touch-callout: none;
   font-family: var(--font-mono) !important;
 }
 
 html,
-body {
+body,
+#root {
   width: 100%;
   height: 100%;
   margin: 0;
@@ -60,22 +62,48 @@ body {
 }
 
 body {
-  display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
+  display: block;
 }
 
-/* App Wrapper - hardcoded 480x320 landscape */
+@media (max-width: 1000px) {
+  html,
+  body,
+  #root,
+  .app-container,
+  .translator-envelope {
+    width: 480px;
+    max-width: 480px;
+  }
+
+  html,
+  body,
+  #root,
+  .app-container {
+    height: 640px;
+    max-height: 640px;
+  }
+}
+
+/* App Wrapper - fills the Pi DSI viewport; desktop keeps the handheld preview. */
 .translator-envelope {
   position: relative;
-  width: 480px;
-  max-width: 480px;
-  height: 320px;
-  max-height: 320px;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
   background-color: var(--bg-black);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+@media (min-width: 1001px) {
+  .app-container,
+  .translator-envelope {
+    width: 480px;
+    height: 320px;
+  }
 }
 
 .status-wrap-left {
@@ -90,8 +118,8 @@ body {
 
 .config-wrap-right {
   position: absolute;
-  right: 0;
-  top: 0;
+  right: 4px;
+  top: 4px;
   display: flex;
   align-items: center;
   z-index: 1000;
@@ -148,21 +176,29 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* Side-by-Side Languages Row */
 .languages-container {
   display: flex;
   width: 100%;
+  max-width: 100%;
   height: 60px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-black);
+  overflow: hidden;
+  min-width: 0;
 }
 
 /* Language Lanes */
 .language-lane {
   position: relative;
   width: 50%;
+  min-width: 0;
+  max-width: 50%;
   height: 100%;
   padding: 8px;
   display: flex;
@@ -170,6 +206,8 @@ body {
   justify-content: center;
   gap: 4px;
   background: var(--bg-black);
+  cursor: pointer;
+  touch-action: none;
   transition:
     background 0.15s,
     color 0.15s;
@@ -315,6 +353,8 @@ body {
   height: 24px;
   overflow: hidden;
   position: relative;
+  cursor: pointer;
+  touch-action: none;
 }
 
 /* Vertical list instead of clock pivot */
@@ -601,6 +641,84 @@ body {
   min-width: 0; /* Prevent flex child from overflowing on narrow screens */
 }
 
+.language-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
+.language-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.language-progress-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.language-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--red-bright);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.language-progress-stage {
+  color: var(--red-bright);
+  font-size: 10px;
+  opacity: 0.78;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.language-progress-track {
+  width: 100%;
+  height: 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--bg-black);
+}
+
+.language-progress-fill {
+  height: 100%;
+  background: var(--red-bright);
+  transition: width 0.25s ease;
+}
+
+.language-progress-track.queued .language-progress-fill,
+.language-progress-track.preparing .language-progress-fill {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--red-bright) 0,
+    var(--red-bright) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  animation: language-progress-stripes 0.7s linear infinite;
+}
+
+.language-progress-track.error .language-progress-fill {
+  background: #ff4444;
+}
+
+@keyframes language-progress-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 12px 0;
+  }
+}
+
 .overlay-body input[type="text"],
 .overlay-body input[type="password"],
 .overlay-body select {
@@ -687,7 +805,10 @@ body {
 
 .app-container {
   position: relative;
-  width: 480px;
-  height: 320px;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  min-width: 0;
 }
-

@@ -51,15 +51,34 @@ export async function testConnectionAPI(endpointUrl, useProxy, apiKey) {
 }
 
 // POST base64 Float32 PCM (16 kHz mono) to the local Moonshine STT.
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`)
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 export async function transcribeAudio(base64Data, sourceLangCode) {
-  const response = await fetch("/api/stt", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      audio_base64: base64Data,
-      language: sourceLangCode,
-    }),
-  })
+  const response = await fetchWithTimeout(
+    "/api/stt",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audio_base64: base64Data,
+        language: sourceLangCode,
+      }),
+    },
+    30000,
+  )
 
   if (!response.ok) {
     throw new Error(`STT failed: ${response.status}`)
@@ -101,11 +120,15 @@ export async function translateText(transcribedText, config) {
     : targetUrl
   const startRequestTime = Date.now()
 
-  const response = await fetch(fetchUrl, {
-    method: "POST",
-    headers,
-    body: payload,
-  })
+  const response = await fetchWithTimeout(
+    fetchUrl,
+    {
+      method: "POST",
+      headers,
+      body: payload,
+    },
+    60000,
+  )
   const requestDuration = ((Date.now() - startRequestTime) / 1000).toFixed(2)
 
   if (!response.ok) {
@@ -166,4 +189,3 @@ export function splitTextIntoSpeechChunks(text, limit = 180) {
   if (currentChunk) chunks.push(currentChunk)
   return chunks
 }
-

@@ -12,6 +12,7 @@ Restart=always
 RestartSec=5
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=XDG_RUNTIME_DIR=/run/user/{{UID}}
+EnvironmentFile=-/etc/default/whisplay-plus-gpio
 
 [Install]
 WantedBy=multi-user.target

@@ -34,6 +34,8 @@ function App() {
     visualizerBars: 16,
     systemPrompt: "Translator mode",
     themeColor: localStorage.getItem("themeColor") || "#ffa500",
+    lane1Language: localStorage.getItem("lane1Language") || "zh",
+    lane2Language: localStorage.getItem("lane2Language") || "en",
   })
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -65,6 +67,21 @@ function App() {
     }
   }, [config.themeColor])
 
+  useEffect(() => {
+    localStorage.setItem("lane1Language", config.lane1Language)
+    localStorage.setItem("lane2Language", config.lane2Language)
+
+    fetch("/api/languages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        languages: [config.lane1Language, config.lane2Language],
+      }),
+    }).catch((err) => {
+      console.debug("Language preparation unavailable:", err)
+    })
+  }, [config.lane1Language, config.lane2Language])
+
   return (
     <div className="app-container">
       <div className="config-wrap-right" style={{ opacity: 1 }}>
@@ -78,7 +95,7 @@ function App() {
       </div>
 
       <div style={{ height: '100%' }}>
-        <TranslatorApp config={config} />
+        <TranslatorApp config={config} setConfig={setConfig} />
       </div>
 
       <SettingsOverlay

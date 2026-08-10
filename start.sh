@@ -45,6 +45,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LITERT_CMD="${PROJECT_DIR}/venv/bin/litert-lm serve"
 API_CMD="${PROJECT_DIR}/venv/bin/python3 ${PROJECT_DIR}/backend/server.py"
 WEB_CMD="npm --prefix ${PROJECT_DIR}/frontend run dev"
+GPIO_CMD="${PROJECT_DIR}/venv/bin/python3 ${PROJECT_DIR}/deploy/whisplay_plus_gpio.py"
 
 CLEANING_UP=0
 cleanup() {
@@ -52,7 +53,7 @@ cleanup() {
     CLEANING_UP=1
     echo "[start.sh] Shutting down..."
     # Kill only tracked child processes, not the entire process group
-    for pid in $LITERT_PID $API_PID $WEB_PID; do
+    for pid in $LITERT_PID $API_PID $WEB_PID $GPIO_PID; do
         [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
     done
     wait 2>/dev/null || true
@@ -85,6 +86,12 @@ cd "$PROJECT_DIR"
 # Set system volume to max
 echo "[start.sh] Setting system volume to max..."
 wpctl set-volume @DEFAULT_AUDIO_SINK@ 1.0 || amixer sset Master 100% 2>/dev/null || true
+
+if [ "${WHISPLAY_ENABLE_GPIO:-0}" = "1" ] && [ -f "${PROJECT_DIR}/deploy/whisplay_plus_gpio.py" ]; then
+    echo "[start.sh] Starting whisplay-plus GPIO bridge..."
+    $GPIO_CMD &
+    GPIO_PID=$!
+fi
 
 # Start litert-lm in background
 echo "[start.sh] Starting litert-lm..."

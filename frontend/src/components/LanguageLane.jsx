@@ -27,8 +27,13 @@ export default function LanguageLane({
   isRecording,
   isActivePerson,
   onRotate,
+  onSelect,
+  onPressStart,
+  onPressEnd,
 }) {
   const drumRef = useRef(null)
+  const longPressTimerRef = useRef(null)
+  const touchRecordingRef = useRef(false)
 
   // Slide the drum so the current language row is in the viewport.
   // The 24px row height must match .revolver-item in style.css.
@@ -48,10 +53,57 @@ export default function LanguageLane({
     if (!isRecording) onRotate(1)
   }
 
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handlePressDown = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    onSelect?.()
+    clearLongPressTimer()
+    touchRecordingRef.current = false
+    longPressTimerRef.current = window.setTimeout(() => {
+      touchRecordingRef.current = true
+      onPressStart?.()
+    }, 320)
+  }
+
+  const handlePressUp = (e) => {
+    e.preventDefault()
+    clearLongPressTimer()
+    if (touchRecordingRef.current) {
+      touchRecordingRef.current = false
+      onPressEnd?.()
+    }
+  }
+
+  const handlePressCancel = () => {
+    clearLongPressTimer()
+    if (touchRecordingRef.current) {
+      touchRecordingRef.current = false
+      onPressEnd?.()
+    }
+  }
+
+  useEffect(() => clearLongPressTimer, [])
+
   return (
     <section
       className={`language-lane lane-${laneId === 1 ? "one" : "two"} ${isRecording ? "recording" : ""} ${isActivePerson ? "selected" : ""}`}
       id={`lane-${laneId}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`${languages[currentIndex].name} push to talk`}
+      onPointerDown={handlePressDown}
+      onPointerUp={handlePressUp}
+      onPointerCancel={handlePressCancel}
+      onLostPointerCapture={handlePressCancel}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <div className="lane-header">
         <span className="lane-label">{laneLabel}</span>
@@ -64,7 +116,10 @@ export default function LanguageLane({
         >
           ◀
         </button>
-        <div className="revolver-viewport">
+        <div
+          className="revolver-viewport"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           <div className="revolver-drum" ref={drumRef}>
             {languages.map((l, i) => (
               <div key={l.code} className="revolver-item">

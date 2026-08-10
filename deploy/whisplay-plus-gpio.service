@@ -1,0 +1,17 @@
+[Unit]
+Description=whisplay-plus GPIO Button and LED Bridge
+After=graphical.target gemma-translator.service
+Wants=gemma-translator.service
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{PROJECT_DIR}}
+EnvironmentFile=-/etc/default/whisplay-plus-gpio
+Environment=PYTHONUNBUFFERED=1
+ExecStart={{PROJECT_DIR}}/venv/bin/python3 {{PROJECT_DIR}}/deploy/whisplay_plus_gpio.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical.target
