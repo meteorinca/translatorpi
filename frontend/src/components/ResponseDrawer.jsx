@@ -26,6 +26,7 @@ export default function ResponseDrawer({
   translationTarget,
   translationText,
   metaText,
+  timing,
   placeholderText,
 }) {
   // Determine if we have any data to show (or if the drawer was explicitly activated)
@@ -69,10 +70,35 @@ export default function ResponseDrawer({
                 </div>
               </div>
             </div>
-            <div className="chat-meta">{metaText}</div>
+            <div className="chat-meta">
+              {timing ? (
+                <>
+                  <TimingItem label="STT" value={timing.stt} />
+                  <TimingItem label="Translate" value={timing.translate} />
+                  <TimingItem label="TTS" value={timing.tts} />
+                </>
+              ) : (
+                metaText
+              )}
+            </div>
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+function TimingItem({ label, value }) {
+  const isLoading = value === "loading"
+  const displayValue =
+    typeof value === "number" ? `${value.toFixed(2)}s` : value || "--"
+
+  return (
+    <div className={`timing-item ${isLoading ? "loading" : ""}`}>
+      <span className="timing-label">{label}</span>
+      <span className="timing-value">
+        {isLoading ? <span className="timing-spinner" /> : displayValue}
+      </span>
     </div>
   )
 }

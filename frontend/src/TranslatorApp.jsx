@@ -60,6 +60,7 @@ function TranslatorApp({ config, setConfig }) {
     text: "— waiting —",
   })
   const [metaText, setMetaText] = useState("")
+  const [timing, setTiming] = useState(null)
 
   // Currently-playing TTS audio element (chunked playback chain)
   const onlineAudioPlayerRef = useRef(null)
@@ -128,25 +129,35 @@ function TranslatorApp({ config, setConfig }) {
   // Speak text via /api/tts, splitting into ~180-char chunks and chaining
   // playback so long translations don't overflow a single TTS request.
   const playTTS = useCallback(
-    (text, targetLang) => {
-      if (!text) return
+    async (text, targetLang) => {
+      if (!text) return 0
       stopSpeaking()
 
       const chunks = splitTextIntoSpeechChunks(text)
-      if (chunks.length === 0) return
+      if (chunks.length === 0) return 0
 
       let chunkIndex = 0
+      let synthesisMs = 0
 
-      const playNextChunk = () => {
+      return new Promise((resolve, reject) => {
+        const playNextChunk = () => {
         if (chunkIndex >= chunks.length) {
           stopSpeaking()
+          resolve(synthesisMs)
           return
         }
         const ttsUrl = `/api/tts?text=${encodeURIComponent(chunks[chunkIndex])}&lang=${encodeURIComponent(targetLang)}`
+        const chunkStart = performance.now()
         const player = new Audio(ttsUrl)
         player.volume = 1.0
         onlineAudioPlayerRef.current = player
 
+        player.oncanplaythrough = () => {
+          if (!player.dataset.synthesisReady) {
+            player.dataset.synthesisReady = "1"
+            synthesisMs += performance.now() - chunkStart
+          }
+        }
         player.onended = () => {
           chunkIndex++
           playNextChunk()
@@ -154,14 +165,17 @@ function TranslatorApp({ config, setConfig }) {
         player.onerror = () => {
           stopSpeaking()
           alert("TTS playback failed. Backend server may be offline.")
+          reject(new Error("TTS playback failed"))
         }
         player.play().catch((e) => {
           console.error("Audio play error:", e)
           stopSpeaking()
+          reject(e)
         })
       }
 
-      playNextChunk()
+        playNextChunk()
+      })
     },
     [stopSpeaking],
   )
@@ -265,11 +279,19 @@ function TranslatorApp({ config, setConfig }) {
       text: "Translating...",
     })
     setMetaText("")
+    setTiming({
+      stt: "loading",
+      translate: null,
+      tts: currentConfig.enableTts ? null : "off",
+    })
 
     try {
       // 1. Transcription
       setTranscriptionData((prev) => ({ ...prev, text: "Listening..." }))
+      const sttStart = performance.now()
       const transcribedText = await transcribeAudio(base64Data, src.code)
+      const sttSeconds = (performance.now() - sttStart) / 1000
+      setTiming((prev) => ({ ...prev, stt: sttSeconds, translate: "loading" }))
       setTranscriptionData((prev) => ({ ...prev, text: transcribedText }))
 
       if (!transcribedText.trim()) {
@@ -277,6 +299,7 @@ function TranslatorApp({ config, setConfig }) {
           ...prev,
           text: "(No speech detected)",
         }))
+        setTiming((prev) => ({ ...prev, translate: null, tts: null }))
         return
       }
 
@@ -288,10 +311,16 @@ function TranslatorApp({ config, setConfig }) {
       })
 
       setTranslationData((prev) => ({ ...prev, text: result.translation }))
-      setMetaText(`Duration: ${result.duration}s | Tokens: ${result.tokens}`)
+      setTiming((prev) => ({
+        ...prev,
+        translate: Number(result.duration),
+        tts: currentConfig.enableTts ? "loading" : "off",
+      }))
+      setMetaText(`Tokens: ${result.tokens}`)
 
       if (currentConfig.enableTts) {
-        playTTS(result.translation, dst.ttsLang)
+        const ttsMs = await playTTS(result.translation, dst.ttsLang)
+        setTiming((prev) => ({ ...prev, tts: ttsMs / 1000 }))
       }
     } catch (err) {
       console.error(err)
@@ -300,6 +329,14 @@ function TranslatorApp({ config, setConfig }) {
         text: prev.text === "Listening..." ? "(Transcription failed)" : prev.text,
       }))
       setTranslationData((prev) => ({ ...prev, text: `Error: ${err.message}` }))
+      setTiming((prev) => {
+        if (!prev) return prev
+        return {
+          stt: prev.stt === "loading" ? "error" : prev.stt,
+          translate: prev.translate === "loading" ? "error" : prev.translate,
+          tts: prev.tts === "loading" ? "error" : prev.tts,
+        }
+      })
     }
   }
 
@@ -430,6 +467,7 @@ function TranslatorApp({ config, setConfig }) {
         translationTarget={translationData.target}
         translationText={translationData.text}
         metaText={metaText}
+        timing={timing}
       />
 
       <main className="translator-workspace">

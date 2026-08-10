@@ -554,12 +554,54 @@ body {
 }
 
 .chat-meta {
-  visibility: hidden; /* duration/tokens are computed but hidden on the kiosk */
-  font-size: 9px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  font-size: 12px;
   color: var(--red-muted);
-  text-align: center;
+  text-align: left;
   padding-top: 2px;
-  min-height: 10px;
+  min-height: 20px;
+}
+
+.timing-item {
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  padding: 4px 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+}
+
+.timing-label {
+  color: var(--red-dim);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.timing-value {
+  color: var(--red-bright);
+  font-weight: 700;
+  min-width: 28px;
+  text-align: right;
+}
+
+.timing-spinner {
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--red-muted);
+  border-top-color: var(--red-bright);
+  border-radius: 50%;
+  display: inline-block;
+  animation: timing-spin 0.7s linear infinite;
+}
+
+@keyframes timing-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Collapsible Settings Fullscreen Overlay Form */
