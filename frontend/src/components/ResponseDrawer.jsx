@@ -37,7 +37,7 @@ export default function ResponseDrawer({
       className={`response-drawer ${isActive ? "active" : ""}`}
       id="response-drawer"
     >
-      <div className="app-title">GEMLANG-1</div>
+      <div className="app-title">Gemma Translator</div>
       <div
         className="drawer-handle"
         onClick={onClose}
@@ -97,7 +97,13 @@ function TimingItem({ label, value }) {
     <div className={`timing-item ${isLoading ? "loading" : ""}`}>
       <span className="timing-label">{label}</span>
       <span className="timing-value">
-        {isLoading ? <span className="timing-spinner" /> : displayValue}
+        {isLoading ? (
+          <span className="timing-dots" aria-label="loading">
+            <span />
+            <span />
+            <span />
+          </span>
+        ) : displayValue}
       </span>
     </div>
   )

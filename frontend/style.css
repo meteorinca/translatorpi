@@ -447,13 +447,13 @@ body {
   font-family: var(--font-mono) !important;
   text-align: left;
   width: 100%;
-  font-size: 12px;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--red-bright);
-  padding: 8px 12px;
+  padding: 8px 12px 6px;
   border-bottom: 2px solid var(--border-color);
   background: var(--bg-black);
   flex-shrink: 0;
-  visibility: hidden;
 }
 
 .chat-panel {
@@ -461,8 +461,8 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 6px 8px 4px;
-  gap: 4px;
+  padding: 12px;
+  gap: 6px;
   min-height: 0;
   overflow: hidden;
 }
@@ -497,13 +497,13 @@ body {
 
 /* Bubbles */
 .chat-bubble {
-  max-width: 82%;
+  max-width: 92%;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 8px;
+  padding: 9px 15px;
   background: var(--bg-black);
   position: relative;
 }
@@ -511,13 +511,15 @@ body {
 /* Left bubble: sharp bottom-left corner (tail) */
 .bubble-left {
   border-bottom-left-radius: 1px;
-  box-shadow: -2px 2px 0 var(--red-muted);
+  margin-left: 3px;
+  box-shadow: -3px 3px 0 var(--red-muted);
 }
 
 /* Right bubble: sharp bottom-right corner (tail) */
 .bubble-right {
   border-bottom-right-radius: 1px;
-  box-shadow: 2px 2px 0 var(--red-muted);
+  margin-right: 3px;
+  box-shadow: 3px 3px 0 var(--red-muted);
   cursor: pointer;
   transition:
     background 0.15s,
@@ -538,7 +540,7 @@ body {
 }
 
 .bubble-label {
-  font-size: 10px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--red-dim);
   letter-spacing: 0.08em;
@@ -546,7 +548,7 @@ body {
 }
 
 .bubble-text {
-  font-size: 18px;
+  font-size: 27px;
   line-height: 1.35;
   color: var(--red-bright);
   word-break: break-word;
@@ -567,12 +569,19 @@ body {
 .timing-item {
   border: 1px solid var(--border-color);
   border-radius: 2px;
-  padding: 4px 5px;
+  padding: 5px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 4px;
   min-width: 0;
+}
+
+.timing-item.loading {
+  box-shadow:
+    inset 0 0 0 1px var(--red-muted),
+    inset 0 0 0 2px var(--border-color);
+  animation: timing-loading-pulse 0.8s ease-in-out infinite alternate;
 }
 
 .timing-label {
@@ -588,19 +597,49 @@ body {
   text-align: right;
 }
 
-.timing-spinner {
-  width: 11px;
-  height: 11px;
-  border: 1px solid var(--red-muted);
-  border-top-color: var(--red-bright);
-  border-radius: 50%;
-  display: inline-block;
-  animation: timing-spin 0.7s linear infinite;
+.timing-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  min-width: 28px;
 }
 
-@keyframes timing-spin {
+.timing-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--red-bright);
+  animation: timing-dot-bounce 0.75s ease-in-out infinite;
+}
+
+.timing-dots span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.timing-dots span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+@keyframes timing-loading-pulse {
+  from {
+    opacity: 0.62;
+  }
   to {
-    transform: rotate(360deg);
+    opacity: 1;
+  }
+}
+
+@keyframes timing-dot-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
   }
 }
 
@@ -655,10 +694,19 @@ body {
 .overlay-body {
   flex-grow: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.overlay-body::-webkit-scrollbar {
+  display: none;
 }
 
 .form-group {

@@ -122,6 +122,9 @@ function TranslatorApp({ config, setConfig }) {
   const stopSpeaking = useCallback(() => {
     if (onlineAudioPlayerRef.current) {
       onlineAudioPlayerRef.current.pause()
+      if (onlineAudioPlayerRef.current.dataset.objectUrl) {
+        URL.revokeObjectURL(onlineAudioPlayerRef.current.dataset.objectUrl)
+      }
       onlineAudioPlayerRef.current = null
     }
   }, [])
@@ -129,7 +132,7 @@ function TranslatorApp({ config, setConfig }) {
   // Speak text via /api/tts, splitting into ~180-char chunks and chaining
   // playback so long translations don't overflow a single TTS request.
   const playTTS = useCallback(
-    async (text, targetLang) => {
+    async (text, targetLang, onSynthesisReady) => {
       if (!text) return 0
       stopSpeaking()
 
@@ -140,39 +143,56 @@ function TranslatorApp({ config, setConfig }) {
       let synthesisMs = 0
 
       return new Promise((resolve, reject) => {
-        const playNextChunk = () => {
-        if (chunkIndex >= chunks.length) {
-          stopSpeaking()
-          resolve(synthesisMs)
-          return
-        }
-        const ttsUrl = `/api/tts?text=${encodeURIComponent(chunks[chunkIndex])}&lang=${encodeURIComponent(targetLang)}`
-        const chunkStart = performance.now()
-        const player = new Audio(ttsUrl)
-        player.volume = 1.0
-        onlineAudioPlayerRef.current = player
+        const playNextChunk = async () => {
+          if (chunkIndex >= chunks.length) {
+            stopSpeaking()
+            resolve(synthesisMs)
+            return
+          }
 
-        player.oncanplaythrough = () => {
-          if (!player.dataset.synthesisReady) {
-            player.dataset.synthesisReady = "1"
+          const ttsUrl = `/api/tts?text=${encodeURIComponent(chunks[chunkIndex])}&lang=${encodeURIComponent(targetLang)}`
+          const chunkStart = performance.now()
+
+          let objectUrl = null
+          try {
+            const response = await fetch(ttsUrl, { cache: "no-store" })
+            if (!response.ok) throw new Error(`TTS failed: ${response.status}`)
+            const audioBlob = await response.blob()
             synthesisMs += performance.now() - chunkStart
+            onSynthesisReady?.(synthesisMs)
+
+            objectUrl = URL.createObjectURL(audioBlob)
+            const player = new Audio(objectUrl)
+            player.volume = 1.0
+            player.dataset.objectUrl = objectUrl
+            onlineAudioPlayerRef.current = player
+
+            player.onended = () => {
+              URL.revokeObjectURL(objectUrl)
+              if (onlineAudioPlayerRef.current === player) {
+                onlineAudioPlayerRef.current = null
+              }
+              chunkIndex++
+              playNextChunk()
+            }
+            player.onerror = () => {
+              URL.revokeObjectURL(objectUrl)
+              stopSpeaking()
+              alert("TTS playback failed. Backend server may be offline.")
+              reject(new Error("TTS playback failed"))
+            }
+            player.play().catch((e) => {
+              URL.revokeObjectURL(objectUrl)
+              console.error("Audio play error:", e)
+              stopSpeaking()
+              reject(e)
+            })
+          } catch (e) {
+            if (objectUrl) URL.revokeObjectURL(objectUrl)
+            stopSpeaking()
+            reject(e)
           }
         }
-        player.onended = () => {
-          chunkIndex++
-          playNextChunk()
-        }
-        player.onerror = () => {
-          stopSpeaking()
-          alert("TTS playback failed. Backend server may be offline.")
-          reject(new Error("TTS playback failed"))
-        }
-        player.play().catch((e) => {
-          console.error("Audio play error:", e)
-          stopSpeaking()
-          reject(e)
-        })
-      }
 
         playNextChunk()
       })
@@ -319,8 +339,12 @@ function TranslatorApp({ config, setConfig }) {
       setMetaText(`Tokens: ${result.tokens}`)
 
       if (currentConfig.enableTts) {
-        const ttsMs = await playTTS(result.translation, dst.ttsLang)
-        setTiming((prev) => ({ ...prev, tts: ttsMs / 1000 }))
+        playTTS(result.translation, dst.ttsLang, (ttsMs) => {
+          setTiming((prev) => ({ ...prev, tts: ttsMs / 1000 }))
+        }).catch((err) => {
+          console.error(err)
+          setTiming((prev) => ({ ...prev, tts: "error" }))
+        })
       }
     } catch (err) {
       console.error(err)
