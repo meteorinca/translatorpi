@@ -43,7 +43,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, pipeline *PipelineR
 		conn:       conn,
 		device:     "breadboard_c3",
 		src:        "en",
-		dst:        "zh",
+		dst:        "es",
 		audioBuf:   make([]byte, 0, 16000*2*10), // pre-allocate ~10 seconds @ 16kHz 16-bit
 		pipeline:   pipeline,
 		lastActive: time.Now(),
@@ -124,8 +124,17 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, pipeline *PipelineR
 				session.writeMu.Unlock()
 
 			case "swap":
-				session.src, session.dst = session.dst, session.src
-				log.Printf("[server] Languages swapped: %s -> %s", session.src, session.dst)
+				targetLangs := []string{"es", "zh", "ja", "ar", "ko"}
+				nextDst := "zh"
+				for i, l := range targetLangs {
+					if l == session.dst {
+						nextDst = targetLangs[(i+1)%len(targetLangs)]
+						break
+					}
+				}
+				session.src = "en"
+				session.dst = nextDst
+				log.Printf("[server] Target language cycled: %s -> %s", session.src, session.dst)
 				session.writeMu.Lock()
 				sendJSON(conn, ServerMsg{
 					Type:    "status",

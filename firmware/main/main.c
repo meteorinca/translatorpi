@@ -15,6 +15,9 @@
 #include "mdns_manager.h"
 #include "time_sync.h"
 #include "web_server.h"
+#include "servo.h"
+#include "dog_actions.h"
+#include "sound_player.h"
 
 static const char *TAG = "MAIN";
 
@@ -77,6 +80,17 @@ void app_main(void)
     ESP_ERROR_CHECK(oled_display_init());
     ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK(i2s_audio_init());
+    sound_player_init();
+
+#if HAS_SERVOS
+    servo_init();
+    servo_worker_start();
+    dog_actions_start();
+    dog_action_send("stand");
+#endif
+
+    // Play dogbot bootup sound
+    sound_play_boot();
 
     // 3. Initialize State Machine
     ESP_ERROR_CHECK(state_machine_init());

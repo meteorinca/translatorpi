@@ -205,7 +205,7 @@ async def handler(websocket):
 
     device = "breadboard_c3"
     src = "en"
-    dst = "zh"
+    dst = "es"
     recording = False
     audio_buffer = bytearray()
 
@@ -235,8 +235,11 @@ async def handler(websocket):
                     await websocket.send(json.dumps({"type": "status", "state": "ready", "message": f"{src} -> {dst}", "src": src, "dst": dst}))
 
                 elif msg_type == "swap":
-                    src, dst = dst, src
-                    print(f"[WS Bridge] Language swap: {src} -> {dst}")
+                    target_langs = ["es", "zh", "ja", "ar", "ko"]
+                    cur_idx = target_langs.index(dst) if dst in target_langs else -1
+                    dst = target_langs[(cur_idx + 1) % len(target_langs)]
+                    src = "en"
+                    print(f"[WS Bridge] Language cycled: {src} -> {dst}")
                     await websocket.send(json.dumps({"type": "status", "state": "ready", "message": f"{src} -> {dst}", "src": src, "dst": dst}))
 
                 elif msg_type == "set_lang":

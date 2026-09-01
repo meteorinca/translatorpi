@@ -4,6 +4,8 @@
 #include "oled_display.h"
 #include "led.h"
 #include "ws_client.h"
+#include "dog_actions.h"
+#include "sound_player.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -116,21 +118,57 @@ static void audio_tx_task(void *arg)
     }
 }
 
-static void swap_languages(void)
+typedef struct {
+    const char *code;
+    const char *name;
+} target_lang_t;
+
+static const target_lang_t s_target_languages[] = {
+    { "es", "Spanish" },
+    { "zh", "Chinese" },
+    { "ja", "Japanese" },
+    { "ar", "Arabic" },
+    { "ko", "Korean" },
+};
+#define NUM_TARGET_LANGUAGES (sizeof(s_target_languages) / sizeof(s_target_languages[0]))
+
+static void cycle_target_language(void)
 {
-    char tmp[8];
-    strncpy(tmp, s_src_lang, sizeof(tmp));
-    strncpy(s_src_lang, s_dst_lang, sizeof(s_src_lang));
-    strncpy(s_dst_lang, tmp, sizeof(s_dst_lang));
-    ESP_LOGI(TAG, "Languages swapped: %s -> %s", s_src_lang, s_dst_lang);
-    ws_client_send_swap();
+    // Always keep source language EN as requested
+    strncpy(s_src_lang, "en", sizeof(s_src_lang));
+
+    int cur_idx = -1;
+    for (int i = 0; i < (int)NUM_TARGET_LANGUAGES; i++) {
+        if (strcasecmp(s_dst_lang, s_target_languages[i].code) == 0) {
+            cur_idx = i;
+            break;
+        }
+    }
+
+    int next_idx = (cur_idx + 1) % NUM_TARGET_LANGUAGES;
+    strncpy(s_dst_lang, s_target_languages[next_idx].code, sizeof(s_dst_lang));
+
+    ESP_LOGI(TAG, "Target language switched: %s -> %s (%s)",
+             s_src_lang, s_dst_lang, s_target_languages[next_idx].name);
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "{\"type\":\"set_lang\",\"src\":\"%s\",\"dst\":\"%s\"}", s_src_lang, s_dst_lang);
+    ws_client_send_text(buf);
+
     led_set_mode(LED_MODE_SWAP_FLASH);
-    oled_display_update(DISPLAY_STATE_READY, s_src_lang, s_dst_lang, "Swapped!");
+    sound_play_chirp();
+
+    char disp_msg[48];
+    snprintf(disp_msg, sizeof(disp_msg), "EN -> %s\n%s",
+             s_dst_lang, s_target_languages[next_idx].name);
+    oled_display_show_text(disp_msg, NULL);
+    oled_display_update(DISPLAY_STATE_READY, s_src_lang, s_dst_lang, "Lang updated");
 }
 
 static void set_languages_internal(const char *src, const char *dst)
 {
-    if (src && strlen(src) > 0) strncpy(s_src_lang, src, sizeof(s_src_lang));
+    // Always keep source language EN as requested
+    strncpy(s_src_lang, "en", sizeof(s_src_lang));
     if (dst && strlen(dst) > 0) strncpy(s_dst_lang, dst, sizeof(s_dst_lang));
     ESP_LOGI(TAG, "Languages updated: %s -> %s", s_src_lang, s_dst_lang);
 
@@ -140,6 +178,10 @@ static void set_languages_internal(const char *src, const char *dst)
 
     led_set_mode(LED_MODE_SWAP_FLASH);
     oled_display_update(DISPLAY_STATE_READY, s_src_lang, s_dst_lang, "Lang updated");
+
+    char disp_msg[48];
+    snprintf(disp_msg, sizeof(disp_msg), "EN -> %s", s_dst_lang);
+    oled_display_show_text(disp_msg, NULL);
 }
 
 static void start_recording(void)
@@ -206,7 +248,7 @@ static void state_task(void *arg)
                 break;
 
             case EV_CMD_SWAP:
-                swap_languages();
+                cycle_target_language();
                 break;
 
             case EV_CMD_SET_LANG:
@@ -232,19 +274,12 @@ static void state_task(void *arg)
                     break;
 
                 case BTN_EVENT_DOUBLE_CLICK:
-                    // Dogbot double-click toggles recording on/off
-                    if (s_state == SM_STATE_RECORDING) {
-                        s_is_toggle_recording = false;
-                        stop_recording();
-                    } else if (s_state == SM_STATE_IDLE) {
-                        s_is_toggle_recording = true;
-                        start_recording();
-                    }
+                    cycle_target_language();
                     break;
 
                 case BTN_EVENT_TRIPLE_CLICK:
                 case BTN_EVENT_SWAP_CLICK:
-                    swap_languages();
+                    cycle_target_language();
                     break;
 
                 case BTN_EVENT_SINGLE_CLICK:
@@ -403,10 +438,15 @@ void state_machine_on_ws_binary(const uint8_t *data, size_t len)
     }
 }
 
-void state_machine_trigger_swap(void)
+void state_machine_cycle_target_lang(void)
 {
     sm_event_t ev = {.type = EV_CMD_SWAP};
     xQueueSend(s_event_queue, &ev, 0);
+}
+
+void state_machine_trigger_swap(void)
+{
+    state_machine_cycle_target_lang();
 }
 
 void state_machine_set_languages(const char *src, const char *dst)

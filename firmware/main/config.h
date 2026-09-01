@@ -34,7 +34,7 @@
 
 // Default Language Pair
 #define CONFIG_DEFAULT_SRC_LANG      "en"
-#define CONFIG_DEFAULT_DST_LANG      "zh"
+#define CONFIG_DEFAULT_DST_LANG      "es"
 
 /* ========================================================================= */
 /*                             AUDIO CONFIGURATION                           */

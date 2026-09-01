@@ -23,6 +23,7 @@ void state_machine_on_ws_text(const ws_msg_t *msg);
 void state_machine_on_ws_binary(const uint8_t *data, size_t len);
 
 // Web UI & Remote API Control hooks
+void state_machine_cycle_target_lang(void);
 void state_machine_trigger_swap(void);
 void state_machine_set_languages(const char *src, const char *dst);
 void state_machine_get_languages(char *src_out, char *dst_out);

@@ -807,8 +807,8 @@ if __name__ == '__main__':
         print(f"===========================================================")
         def _prewarm_models():
             try:
-                print("[Prewarm] Loading default Chinese/English STT & TTS models into memory...", flush=True)
-                prepare_languages_background(["zh", "en"])
+                print("[Prewarm] Loading default Spanish/Chinese/English STT & TTS models into memory...", flush=True)
+                prepare_languages_background(["es", "zh", "en"])
                 print("[Prewarm] Default language models pre-warmed successfully.", flush=True)
             except Exception as e:
                 print(f"[Prewarm Error] {e}", flush=True)

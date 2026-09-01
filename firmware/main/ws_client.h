@@ -27,4 +27,5 @@ esp_err_t ws_client_send_hello(const char *device, const char *src, const char *
 esp_err_t ws_client_send_record_start(void);
 esp_err_t ws_client_send_record_stop(void);
 esp_err_t ws_client_send_swap(void);
+esp_err_t ws_client_send_set_lang(const char *src, const char *dst);
 esp_err_t ws_client_send_ping(void);

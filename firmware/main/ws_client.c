@@ -163,6 +163,14 @@ esp_err_t ws_client_send_swap(void)
     return ws_client_send_text("{\"type\":\"swap\"}");
 }
 
+esp_err_t ws_client_send_set_lang(const char *src, const char *dst)
+{
+    char buf[128];
+    snprintf(buf, sizeof(buf), "{\"type\":\"set_lang\",\"src\":\"%s\",\"dst\":\"%s\"}",
+             src ? src : "en", dst ? dst : "es");
+    return ws_client_send_text(buf);
+}
+
 esp_err_t ws_client_send_ping(void)
 {
     return ws_client_send_text("{\"type\":\"ping\"}");

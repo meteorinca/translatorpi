@@ -30,7 +30,9 @@ static void button_task(void *arg)
     gpio_config(&io_conf);
 
     bool btn_state_prev = false;
+#if HAS_SECONDARY_BUTTON
     bool swap_state_prev = false;
+#endif
     bool is_holding_ptt = false;
     uint32_t press_duration_ms = 0;
     uint32_t release_duration_ms = 0;
@@ -85,10 +87,10 @@ static void button_task(void *arg)
                         ESP_LOGI(TAG, "Single click detected");
                         if (s_callback) s_callback(BTN_EVENT_SINGLE_CLICK);
                     } else if (click_count == 2) {
-                        ESP_LOGI(TAG, "Double click detected (Dogbot talk toggle)");
+                        ESP_LOGI(TAG, "Double click detected (Cycle target language)");
                         if (s_callback) s_callback(BTN_EVENT_DOUBLE_CLICK);
                     } else if (click_count >= 3) {
-                        ESP_LOGI(TAG, "Triple click detected (Language swap)");
+                        ESP_LOGI(TAG, "Triple click detected (Cycle target language)");
                         if (s_callback) s_callback(BTN_EVENT_TRIPLE_CLICK);
                     }
                     click_count = 0;
