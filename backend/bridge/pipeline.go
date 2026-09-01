@@ -79,7 +79,11 @@ func (p *PipelineRunner) Run(audioPCM []byte, src, dst string, conn *websocket.C
 	}
 
 	log.Printf("[pipeline] Translation result: \"%s\"", translatedText)
-	writeJSON(ServerMsg{Type: "translation", Text: translatedText})
+	writeJSON(ServerMsg{
+		Type:        "translation",
+		Text:        translatedText,
+		Translation: translatedText,
+	})
 
 	// Step 3: TTS
 	writeJSON(ServerMsg{Type: "status", State: "synthesizing", Message: "Generating voice..."})
@@ -93,7 +97,7 @@ func (p *PipelineRunner) Run(audioPCM []byte, src, dst string, conn *websocket.C
 	}
 
 	// Step 4: Stream audio back to device
-	log.Printf("[pipeline] Streaming %d bytes TTS audio back to client", len(ttsPCM))
+	log.Printf("[pipeline] Streaming %d bytes TTS audio back to client (%.2f seconds @ 16kHz)", len(ttsPCM), float64(len(ttsPCM))/32000.0)
 	writeJSON(ServerMsg{
 		Type:  "tts_audio",
 		Len:   len(ttsPCM),
@@ -109,8 +113,8 @@ func (p *PipelineRunner) Run(audioPCM []byte, src, dst string, conn *websocket.C
 			end = len(ttsPCM)
 		}
 		writeBinary(ttsPCM[offset:end])
-		// Small inter-chunk pacing to avoid flooding small ESP32 ringbuffers
-		time.Sleep(10 * time.Millisecond)
+		// Pacing: 3200 bytes = 100ms audio @ 16kHz. 35ms sleep prevents overflowing ESP32 ringbuffer while buffering ahead smoothly.
+		time.Sleep(35 * time.Millisecond)
 	}
 
 	writeJSON(ServerMsg{Type: "done"})

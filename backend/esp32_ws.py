@@ -158,21 +158,26 @@ async def process_utterance(websocket, pcm_bytes: bytes, src: str, dst: str):
     await websocket.send(json.dumps({"type": "status", "state": "translating", "message": "Translating..."}))
     translation = await translate_text(stt_text, src, dst)
     print(f"[WS Bridge] Translation: '{translation}'")
-    await websocket.send(json.dumps({"type": "translation", "text": translation}))
+    await websocket.send(json.dumps({
+        "type": "translation",
+        "text": translation,
+        "translation": translation,
+    }))
 
     # 3. TTS
     await websocket.send(json.dumps({"type": "status", "state": "synthesizing", "message": "Synthesizing voice..."}))
     def _run_tts():
         engine = get_tts_engine(dst)
         audio, sample_rate = engine.synthesize(translation)
+        print(f"[WS Bridge] ({dst}) Engine native rate: {sample_rate} Hz, samples: {len(audio)}")
         samples = np.asarray(audio, dtype=np.float32)
-        if sample_rate != 16000:
+        if int(sample_rate) != 16000:
             samples = resample_linear(samples, int(sample_rate), 16000)
         samples = np.clip(samples, -1.0, 1.0)
         return (samples * 32767.0).astype(np.int16).tobytes()
 
     tts_pcm = await loop.run_in_executor(None, _run_tts)
-    print(f"[WS Bridge] TTS synthesized: {len(tts_pcm)} bytes")
+    print(f"[WS Bridge] TTS synthesized: {len(tts_pcm)} bytes (duration: {len(tts_pcm)/32000:.2f}s)")
 
     # 4. Stream audio back
     await websocket.send(json.dumps({
@@ -182,12 +187,12 @@ async def process_utterance(websocket, pcm_bytes: bytes, src: str, dst: str):
         "state": "speaking"
     }))
 
-    # Stream in 3200-byte chunks (100ms)
+    # Stream in 3200-byte chunks (100ms) with 35ms pacing to avoid overflowing ESP32 ringbuffer
     chunk_size = 3200
     for i in range(0, len(tts_pcm), chunk_size):
         chunk = tts_pcm[i:i + chunk_size]
         await websocket.send(chunk)
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.035)
 
     await websocket.send(json.dumps({"type": "done"}))
     await websocket.send(json.dumps({"type": "status", "state": "ready", "message": f"{src} -> {dst}"}))

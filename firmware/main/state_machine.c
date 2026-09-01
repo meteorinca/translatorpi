@@ -47,6 +47,7 @@ static sm_state_t s_state = SM_STATE_INIT;
 static char s_src_lang[8] = CONFIG_DEFAULT_SRC_LANG;
 static char s_dst_lang[8] = CONFIG_DEFAULT_DST_LANG;
 static bool s_is_toggle_recording = false;
+static char s_last_translation[256] = {0};
 
 // Background Audio RX Task (Mic -> WebSocket streaming)
 static void audio_rx_task(void *arg)
@@ -86,14 +87,20 @@ static void audio_tx_task(void *arg)
             if (s_state != SM_STATE_SPEAKING && s_state != SM_STATE_RECORDING) {
                 s_state = SM_STATE_SPEAKING;
                 led_set_mode(LED_MODE_SPEAKING);
-                oled_display_update(DISPLAY_STATE_SPEAKING, s_src_lang, s_dst_lang, "Playing speech...");
+                oled_display_update(DISPLAY_STATE_SPEAKING, s_src_lang, s_dst_lang,
+                                    s_last_translation[0] ? s_last_translation : "Speaking...");
             }
 
             size_t written = 0;
             while (written < item_size && s_state != SM_STATE_RECORDING) {
                 size_t chunk = (item_size - written) / sizeof(int16_t);
+                if (chunk > 512) chunk = 512;
                 size_t s = i2s_audio_write((const int16_t *)(item + written), chunk, pdMS_TO_TICKS(100));
-                written += s * sizeof(int16_t);
+                if (s == 0) {
+                    vTaskDelay(pdMS_TO_TICKS(2));
+                } else {
+                    written += s * sizeof(int16_t);
+                }
             }
             vRingbufferReturnItem(s_playback_ringbuf, (void *)item);
         } else {
@@ -102,6 +109,7 @@ static void audio_tx_task(void *arg)
                 i2s_audio_clear_buffers();
                 s_state = SM_STATE_IDLE;
                 led_set_mode(LED_MODE_IDLE);
+                s_last_translation[0] = '\0';
                 oled_display_update(DISPLAY_STATE_READY, s_src_lang, s_dst_lang, "Ready");
             }
         }
@@ -266,14 +274,17 @@ static void state_task(void *arg)
 
             case EV_SERVER_TRANSLATION:
                 if (ev.str_val1) {
-                    oled_display_show_text(NULL, ev.str_val1);
+                    strncpy(s_last_translation, ev.str_val1, sizeof(s_last_translation) - 1);
+                    s_last_translation[sizeof(s_last_translation) - 1] = '\0';
+                    oled_display_show_text(NULL, s_last_translation);
                 }
                 break;
 
             case EV_SERVER_TTS_START:
                 s_state = SM_STATE_SPEAKING;
                 led_set_mode(LED_MODE_SPEAKING);
-                oled_display_update(DISPLAY_STATE_SPEAKING, s_src_lang, s_dst_lang, "Speaking...");
+                oled_display_update(DISPLAY_STATE_SPEAKING, s_src_lang, s_dst_lang,
+                                    s_last_translation[0] ? s_last_translation : "Speaking...");
                 break;
 
             case EV_SERVER_DONE:
@@ -304,7 +315,7 @@ static void state_task(void *arg)
 esp_err_t state_machine_init(void)
 {
     s_event_queue = xQueueCreate(25, sizeof(sm_event_t));
-    s_playback_ringbuf = xRingbufferCreate(32768, RINGBUF_TYPE_NOSPLIT);
+    s_playback_ringbuf = xRingbufferCreate(65536, RINGBUF_TYPE_NOSPLIT);
 
     if (!s_event_queue || !s_playback_ringbuf) {
         ESP_LOGE(TAG, "Failed to create state machine queues/ringbuffer");
@@ -355,10 +366,14 @@ void state_machine_on_ws_text(const ws_msg_t *msg)
         };
         xQueueSend(s_event_queue, &ev, 0);
     } else if (strcmp(msg->type, "translation") == 0) {
+        const char *trans_str = msg->translation ? msg->translation : msg->text;
         sm_event_t ev = {
             .type = EV_SERVER_TRANSLATION,
-            .str_val1 = msg->translation ? strdup(msg->translation) : NULL,
+            .str_val1 = trans_str ? strdup(trans_str) : NULL,
         };
+        xQueueSend(s_event_queue, &ev, 0);
+    } else if (strcmp(msg->type, "tts_audio") == 0) {
+        sm_event_t ev = {.type = EV_SERVER_TTS_START};
         xQueueSend(s_event_queue, &ev, 0);
     } else if (strcmp(msg->type, "done") == 0) {
         sm_event_t ev = {.type = EV_SERVER_DONE};
@@ -375,7 +390,7 @@ void state_machine_on_ws_text(const ws_msg_t *msg)
 void state_machine_on_ws_binary(const uint8_t *data, size_t len)
 {
     if (s_playback_ringbuf && data && len > 0) {
-        xRingbufferSend(s_playback_ringbuf, data, len, pdMS_TO_TICKS(50));
+        xRingbufferSend(s_playback_ringbuf, data, len, pdMS_TO_TICKS(150));
     }
 }
 

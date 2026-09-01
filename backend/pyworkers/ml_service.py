@@ -268,18 +268,19 @@ async def tts(text: str = Form(""), lang: str = Form("zh")):
     try:
         engine = get_tts_engine(lang)
         audio, sample_rate = engine.synthesize(text)
+        print(f"[ML-TTS] ({lang}) Engine native rate: {sample_rate} Hz, samples: {len(audio)}")
 
         samples = np.asarray(audio, dtype=np.float32)
 
-        # Resample to 16,000 Hz if engine output rate is different (e.g. 22,050 Hz)
-        if sample_rate != 16000:
+        # Resample to 16,000 Hz if engine output rate is different (e.g. Kokoro 24,000 Hz / Piper 22,050 Hz)
+        if int(sample_rate) != 16000:
             samples = resample_linear(samples, int(sample_rate), 16000)
 
         # Clip and convert to 16-bit PCM
         samples = np.clip(samples, -1.0, 1.0)
         pcm16 = (samples * 32767.0).astype(np.int16).tobytes()
 
-        print(f"[ML-TTS] ({lang}) Synthesized '{text[:30]}...' -> {len(pcm16)} bytes PCM16 @ 16kHz")
+        print(f"[ML-TTS] ({lang}) Synthesized '{text[:30]}...' -> {len(pcm16)} bytes PCM16 @ 16kHz (duration: {len(pcm16)/32000:.2f}s)")
         return Response(content=pcm16, media_type="application/octet-stream")
     except Exception as e:
         print(f"[ML-TTS Error] {e}")
