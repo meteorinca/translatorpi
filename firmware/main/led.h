@@ -11,6 +11,7 @@ typedef enum {
     LED_MODE_WAITING,
     LED_MODE_SPEAKING,
     LED_MODE_SWAP_FLASH,
+    LED_MODE_OTA_FLASHING,
     LED_MODE_ERROR,
 } led_mode_t;
 

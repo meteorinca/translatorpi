@@ -138,7 +138,7 @@ esp_err_t i2s_audio_init(void)
     // --- Dogbot Continuous ADC Microphone Sampling (GPIO 2, ADC1 CH2) ---
     ESP_LOGI(TAG, "Initializing Continuous ADC1 CH%d Mic sampling @ %d Hz", MIC_ADC_CHANNEL, AUDIO_SAMPLE_RATE);
     adc_continuous_handle_cfg_t adc_config = {
-        .max_store_buf_size = 4096,
+        .max_store_buf_size = 8192,
         .conv_frame_size = 512,
     };
     ret = adc_continuous_new_handle(&adc_config, &s_adc_handle);
@@ -183,16 +183,18 @@ size_t i2s_audio_read(int16_t *buf, size_t samples, TickType_t timeout)
 #if AUDIO_USE_ADC_MIC
     if (!s_adc_handle || !buf || samples == 0) return 0;
 
-    // Allocate temp buffer for raw 4-byte ADC conversion results
+    // Use pre-allocated static buffer to avoid heap fragmentation during streaming
+    static uint8_t s_raw_adc_buf[8192];
     uint32_t bytes_to_read = samples * SOC_ADC_DIGI_RESULT_BYTES;
-    uint8_t *raw_buf = malloc(bytes_to_read);
-    if (!raw_buf) return 0;
+    if (bytes_to_read > sizeof(s_raw_adc_buf)) {
+        bytes_to_read = sizeof(s_raw_adc_buf);
+    }
+    uint8_t *raw_buf = s_raw_adc_buf;
 
     uint32_t out_len = 0;
     esp_err_t ret = adc_continuous_read(s_adc_handle, raw_buf, bytes_to_read, &out_len, timeout);
     if (ret != ESP_OK && ret != ESP_ERR_TIMEOUT) {
         ESP_LOGW(TAG, "adc_continuous_read error: %s", esp_err_to_name(ret));
-        free(raw_buf);
         return 0;
     }
 
@@ -213,7 +215,6 @@ size_t i2s_audio_read(int16_t *buf, size_t samples, TickType_t timeout)
         buf[i] = (int16_t)amplified;
     }
 
-    free(raw_buf);
     return samples_read;
 
 #else

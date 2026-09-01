@@ -102,6 +102,18 @@ static void led_task(void *arg)
             s_current_mode = LED_MODE_IDLE;
             break;
 
+        case LED_MODE_OTA_FLASHING: {
+            // Rapid alternating magenta / cyan flash when OTA flashing firmware
+            bool alt = (tick % 2) == 0;
+            if (alt) {
+                set_all_rgb(60, 0, 70); // Bright Magenta
+            } else {
+                set_all_rgb(0, 70, 70); // Bright Cyan
+            }
+            vTaskDelay(pdMS_TO_TICKS(50));
+            break;
+        }
+
         case LED_MODE_ERROR: {
             // Red rapid flash
             bool on = (tick % 2) == 0;

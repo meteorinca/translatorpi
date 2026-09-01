@@ -37,6 +37,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, pipeline *PipelineR
 		return
 	}
 	defer conn.Close()
+	conn.SetReadLimit(10 * 1024 * 1024)
 
 	session := &ClientSession{
 		conn:       conn,

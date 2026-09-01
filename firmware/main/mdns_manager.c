@@ -10,7 +10,7 @@ static char s_hostname[32] = {0};
 
 esp_err_t mdns_manager_init(void)
 {
-    snprintf(s_hostname, sizeof(s_hostname), "%s-%d", DEVICE_NAME_PREFIX, DEVICE_NUMBER);
+    snprintf(s_hostname, sizeof(s_hostname), "%s%d", MDNS_HOSTNAME_PREFIX, DEVICE_NUMBER);
 
     esp_err_t err = mdns_init();
     if (err != ESP_OK) {

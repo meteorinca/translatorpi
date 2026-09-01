@@ -68,7 +68,7 @@ static void audio_rx_task(void *arg)
                 // Send binary frame
                 ws_client_send_binary((const uint8_t *)rx_buf, read_samples * sizeof(int16_t));
             }
-            vTaskDelay(pdMS_TO_TICKS(2));
+            vTaskDelay(pdMS_TO_TICKS(10));
         } else {
             vTaskDelay(pdMS_TO_TICKS(20));
         }
@@ -159,7 +159,16 @@ static void stop_recording(void)
         s_state = SM_STATE_WAITING;
         led_set_mode(LED_MODE_WAITING);
         oled_display_update(DISPLAY_STATE_TRANSCRIBING, s_src_lang, s_dst_lang, "Processing...");
-        ws_client_send_record_stop();
+        
+        // Wait 30ms to allow in-flight audio chunk to finish network transmission before sending stop control frame
+        vTaskDelay(pdMS_TO_TICKS(30));
+
+        esp_err_t err = ws_client_send_record_stop();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Record stop send failed (%s), retrying...", esp_err_to_name(err));
+            vTaskDelay(pdMS_TO_TICKS(50));
+            ws_client_send_record_stop();
+        }
         ESP_LOGI(TAG, "Recording stopped, waiting for translation...");
     }
 }
@@ -315,7 +324,7 @@ static void state_task(void *arg)
 esp_err_t state_machine_init(void)
 {
     s_event_queue = xQueueCreate(25, sizeof(sm_event_t));
-    s_playback_ringbuf = xRingbufferCreate(65536, RINGBUF_TYPE_NOSPLIT);
+    s_playback_ringbuf = xRingbufferCreate(32768, RINGBUF_TYPE_NOSPLIT);
 
     if (!s_event_queue || !s_playback_ringbuf) {
         ESP_LOGE(TAG, "Failed to create state machine queues/ringbuffer");

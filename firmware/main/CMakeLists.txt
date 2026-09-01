@@ -11,12 +11,17 @@ idf_component_register(
         "button.c"
         "led.c"
         "state_machine.c"
+        "ota_mgr.c"
+        "servo.c"
+        "dog_actions.c"
+        "sound_player.c"
     INCLUDE_DIRS 
         "."
     REQUIRES 
         esp_wifi
         esp_event
         nvs_flash
+        app_update
         esp_websocket_client
         esp_http_server
         mdns
@@ -27,6 +32,7 @@ idf_component_register(
         esp_driver_i2c
         esp_driver_rmt
         esp_driver_spi
+        esp_driver_ledc
         esp_lcd
         esp_ringbuf
         led_strip

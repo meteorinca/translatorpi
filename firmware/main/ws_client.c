@@ -6,10 +6,14 @@
 #include "esp_log.h"
 #include "cJSON.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 static const char *TAG = "WS_CLIENT";
 
 static esp_websocket_client_handle_t s_client = NULL;
 static bool s_is_connected = false;
+static SemaphoreHandle_t s_send_mutex = NULL;
 static ws_conn_callback_t s_conn_cb = NULL;
 static ws_text_callback_t s_text_cb = NULL;
 static ws_binary_callback_t s_bin_cb = NULL;
@@ -89,11 +93,15 @@ esp_err_t ws_client_init(ws_conn_callback_t conn_cb, ws_text_callback_t text_cb,
     s_text_cb = text_cb;
     s_bin_cb = bin_cb;
 
+    if (!s_send_mutex) {
+        s_send_mutex = xSemaphoreCreateMutex();
+    }
+
     esp_websocket_client_config_t websocket_cfg = {
         .uri = CONFIG_WS_SERVER_URI,
         .reconnect_timeout_ms = 2000,
-        .network_timeout_ms = 5000,
-        .buffer_size = 16384,
+        .network_timeout_ms = 10000,
+        .buffer_size = 4096,
     };
 
     ESP_LOGI(TAG, "Initializing WebSocket client to %s", CONFIG_WS_SERVER_URI);
@@ -109,16 +117,26 @@ bool ws_client_is_connected(void)
 
 esp_err_t ws_client_send_text(const char *json_str)
 {
-    if (!ws_client_is_connected()) return ESP_ERR_INVALID_STATE;
+    if (!ws_client_is_connected()) {
+        ESP_LOGW(TAG, "ws_client_send_text: client not connected (payload: %s)", json_str ? json_str : "NULL");
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_send_mutex) xSemaphoreTake(s_send_mutex, portMAX_DELAY);
     int len = strlen(json_str);
-    int ret = esp_websocket_client_send_text(s_client, json_str, len, pdMS_TO_TICKS(1000));
+    int ret = esp_websocket_client_send_text(s_client, json_str, len, pdMS_TO_TICKS(2000));
+    if (s_send_mutex) xSemaphoreGive(s_send_mutex);
+    if (ret < 0) {
+        ESP_LOGE(TAG, "esp_websocket_client_send_text failed (%d) for %s", ret, json_str);
+    }
     return (ret >= 0) ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t ws_client_send_binary(const uint8_t *data, size_t len)
 {
     if (!ws_client_is_connected()) return ESP_ERR_INVALID_STATE;
+    if (s_send_mutex) xSemaphoreTake(s_send_mutex, portMAX_DELAY);
     int ret = esp_websocket_client_send_bin(s_client, (const char *)data, len, pdMS_TO_TICKS(1000));
+    if (s_send_mutex) xSemaphoreGive(s_send_mutex);
     return (ret >= 0) ? ESP_OK : ESP_FAIL;
 }
 

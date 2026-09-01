@@ -40,8 +40,8 @@
 /*                             AUDIO CONFIGURATION                           */
 /* ========================================================================= */
 #define AUDIO_SAMPLE_RATE            16000
-#define AUDIO_CHUNK_SAMPLES          1600       // 100 ms chunk @ 16 kHz mono
-#define AUDIO_CHUNK_BYTES            (AUDIO_CHUNK_SAMPLES * sizeof(int16_t)) // 3200 bytes
+#define AUDIO_CHUNK_SAMPLES          640        // 40 ms chunk @ 16 kHz mono (1280 bytes, fits in 1 TCP packet <1460 MSS)
+#define AUDIO_CHUNK_BYTES            (AUDIO_CHUNK_SAMPLES * sizeof(int16_t)) // 1280 bytes
 #define AUDIO_DMA_BUF_COUNT          8
 #define AUDIO_DMA_BUF_LEN            512
 
@@ -52,6 +52,7 @@
 
 #define DEVICE_NAME_PREFIX           "translator"
 #define DEVICE_NAME_STR              "breadboard_c3"
+#define MDNS_HOSTNAME_PREFIX         "gemma"
 
 // I2S Bus (Single I2S_NUM_0, Full-Duplex Shared Clock)
 #define I2S_BCLK_PIN                 GPIO_NUM_4
@@ -84,6 +85,7 @@
 
 #define DEVICE_NAME_PREFIX           "dogbot"
 #define DEVICE_NAME_STR              "dogbot_c3"
+#define MDNS_HOSTNAME_PREFIX         "gemmadog"
 
 // Audio PDM Speaker & ADC Microphone
 #define AUDIO_USE_PDM_TX             1
@@ -107,5 +109,29 @@
 // LED Strip (WS2812B on GPIO8)
 #define STATUS_LED_PIN               GPIO_NUM_8
 #define USE_WS2812B_LED              1
+
+// Servos (4 leg servos)
+#define HAS_SERVOS                   1
+#define SERVO_COUNT                  4
+#define SERVO1_GPIO                  GPIO_NUM_21   // FL leg
+#define LEDC_CH_SERVO1               LEDC_CHANNEL_0
+#define POS1_NEUTRAL                 90
+
+#define SERVO2_GPIO                  GPIO_NUM_19   // FR leg
+#define LEDC_CH_SERVO2               LEDC_CHANNEL_1
+#define POS2_NEUTRAL                 90
+
+#define SERVO3_GPIO                  GPIO_NUM_20   // BL leg
+#define LEDC_CH_SERVO3               LEDC_CHANNEL_2
+#define POS3_NEUTRAL                 90
+
+#define SERVO4_GPIO                  GPIO_NUM_18   // BR leg
+#define LEDC_CH_SERVO4               LEDC_CHANNEL_3
+#define POS4_NEUTRAL                 90
+
+#define LEDC_TIMER                   LEDC_TIMER_0
+#define SERVO_MIN_PULSE_US           500
+#define SERVO_MAX_PULSE_US           2500
+#define SERVO_RETURN_MS              500
 
 #endif

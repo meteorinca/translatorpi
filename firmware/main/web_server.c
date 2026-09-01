@@ -5,6 +5,7 @@
 #include "mdns_manager.h"
 #include "wifi_manager.h"
 #include "ws_client.h"
+#include "ota_mgr.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -118,6 +119,16 @@ static const char HTML_INDEX[] =
 "  </div>"
 
 "  <div class='card'>"
+"    <h3 style='margin-bottom:8px;'>OTA Firmware Update</h3>"
+"    <input type='file' id='ota-file' accept='.bin' style='color:#a0a0d0; margin-bottom:10px; width:100%;' />"
+"    <div style='background:#0a0a1e; border-radius:6px; height:8px; margin-bottom:8px; overflow:hidden;'>"
+"      <div id='ota-bar' style='width:0%; height:100%; background:linear-gradient(90deg, #00e5a0, #38bdf8); transition:width 0.3s;'></div>"
+"    </div>"
+"    <div id='ota-msg' style='font-size:12px; margin-bottom:8px; min-height:16px;'></div>"
+"    <button class='btn btn-primary' id='ota-btn' style='width:100%;' onclick='doOTA()'>Flash Firmware OTA</button>"
+"  </div>"
+
+"  <div class='card'>"
 "    <button class='btn btn-red' style='width:100%;' onclick='rebootDevice()'>Reboot Device</button>"
 "  </div>"
 "</div>"
@@ -176,17 +187,66 @@ static const char HTML_INDEX[] =
 "    fetchStatus();"
 "  }"
 "}"
+"function doOTA() {"
+"  var f = document.getElementById('ota-file').files[0];"
+"  var msg = document.getElementById('ota-msg');"
+"  var bar = document.getElementById('ota-bar');"
+"  var btn = document.getElementById('ota-btn');"
+"  if (!f) {"
+"    msg.textContent = 'Pick a .bin file first';"
+"    msg.style.color = '#f59e0b';"
+"    return;"
+"  }"
+"  btn.disabled = true;"
+"  btn.style.opacity = '.5';"
+"  msg.style.color = '#38bdf8';"
+"  msg.textContent = 'Uploading ' + f.name + ' (' + Math.round(f.size / 1024) + 'KB)...';"
+"  bar.style.width = '0%';"
+"  var xhr = new XMLHttpRequest();"
+"  xhr.open('POST', '/ota', true);"
+"  xhr.setRequestHeader('Content-Type', 'application/octet-stream');"
+"  xhr.upload.onprogress = function (e) {"
+"    if (e.lengthComputable) {"
+"      var pct = Math.round((e.loaded / e.total) * 100);"
+"      bar.style.width = pct + '%';"
+"      msg.textContent = 'Uploading... ' + pct + '%';"
+"    }"
+"  };"
+"  xhr.onload = function () {"
+"    bar.style.width = '100%';"
+"    if (xhr.status === 200) {"
+"      msg.style.color = '#22c55e';"
+"      var t = 10;"
+"      var iv = setInterval(function () {"
+"        msg.textContent = 'OTA OK! Rebooting... reload in ' + t + 's';"
+"        if (--t < 0) {"
+"          clearInterval(iv);"
+"          location.reload();"
+"        }"
+"      }, 1000);"
+"    } else {"
+"      msg.style.color = '#ef4444';"
+"      msg.textContent = 'OTA failed: HTTP ' + xhr.status;"
+"      btn.disabled = false;"
+"      btn.style.opacity = '1';"
+"    }"
+"  };"
+"  xhr.onerror = function () {"
+"    msg.style.color = '#ef4444';"
+"    msg.textContent = 'Upload error';"
+"    btn.disabled = false;"
+"    btn.style.opacity = '1';"
+"  };"
+"  xhr.send(f);"
+"}"
 "async function rebootDevice() {"
 "  if(confirm('Reboot ESP32?')) {"
 "    await fetch('/api/reboot', {method:'POST'});"
-"    alert('Rebooting...');"
-"  }"
-"}"
 "// Auto-sync browser epoch on first load\n"
 "window.addEventListener('load', () => {"
 "  syncBrowserTime();"
 "  fetchStatus();"
-"  setInterval(fetchStatus, 2000);"
+"  setInterval(fetchStatus, 4000);"
 "});"
 "</script>"
 "</body>"
@@ -195,7 +255,18 @@ static const char HTML_INDEX[] =
 static esp_err_t index_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, HTML_INDEX, HTTPD_RESP_USE_STRLEN);
+    const char *ptr = HTML_INDEX;
+    size_t total = strlen(HTML_INDEX);
+    while (total > 0) {
+        size_t chunk = (total > 1024) ? 1024 : total;
+        esp_err_t err = httpd_resp_send_chunk(req, ptr, chunk);
+        if (err != ESP_OK) {
+            return err;
+        }
+        ptr += chunk;
+        total -= chunk;
+    }
+    return httpd_resp_send_chunk(req, NULL, 0);
 }
 
 static esp_err_t status_handler(httpd_req_t *req)
@@ -307,10 +378,77 @@ static esp_err_t reboot_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+#define OTA_BUF_SIZE 4096
+
+static esp_err_t ota_options_handler(httpd_req_t *req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "POST, OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t ota_post_handler(httpd_req_t *req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
+    int total = req->content_len;
+    if (total <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No firmware data");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "Incoming OTA firmware: %d bytes", total);
+
+    ota_handle_t h = {0};
+    if (ota_begin(&h) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA begin failed");
+        return ESP_FAIL;
+    }
+
+    static char buf[OTA_BUF_SIZE];
+    int remaining = total;
+    while (remaining > 0) {
+        int to_read = remaining < OTA_BUF_SIZE ? remaining : OTA_BUF_SIZE;
+        int received = httpd_req_recv(req, buf, to_read);
+        if (received == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (received <= 0) {
+            ESP_LOGE(TAG, "OTA recv error (%d), aborting", received);
+            ota_abort(&h);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Receive error");
+            return ESP_FAIL;
+        }
+        if (ota_write(&h, buf, received) != ESP_OK) {
+            ota_abort(&h);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash write error");
+            return ESP_FAIL;
+        }
+        remaining -= received;
+        if (((total - remaining) % 65536) < OTA_BUF_SIZE) {
+            ESP_LOGI(TAG, "OTA Progress: %d / %d bytes", total - remaining, total);
+        }
+    }
+
+    if (ota_end(&h) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA validation failed");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"ota\":\"ok\",\"restart\":true}", HTTPD_RESP_USE_STRLEN);
+
+    vTaskDelay(pdMS_TO_TICKS(1500));
+    esp_restart();
+    return ESP_OK;
+}
+
 esp_err_t web_server_start(void)
 {
+    if (s_server != NULL) {
+        return ESP_OK;
+    }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 16;
     config.stack_size = 8192;
 
     ESP_LOGI(TAG, "Starting HTTP Web Dashboard on port %d", config.server_port);
@@ -345,6 +483,18 @@ esp_err_t web_server_start(void)
 
     httpd_uri_t uri_reboot = { .uri = "/api/reboot", .method = HTTP_POST, .handler = reboot_handler };
     httpd_register_uri_handler(s_server, &uri_reboot);
+
+    httpd_uri_t uri_ota_post = { .uri = "/ota", .method = HTTP_POST, .handler = ota_post_handler };
+    httpd_register_uri_handler(s_server, &uri_ota_post);
+
+    httpd_uri_t uri_ota_opt = { .uri = "/ota", .method = HTTP_OPTIONS, .handler = ota_options_handler };
+    httpd_register_uri_handler(s_server, &uri_ota_opt);
+
+    httpd_uri_t uri_api_ota_post = { .uri = "/api/ota", .method = HTTP_POST, .handler = ota_post_handler };
+    httpd_register_uri_handler(s_server, &uri_api_ota_post);
+
+    httpd_uri_t uri_api_ota_opt = { .uri = "/api/ota", .method = HTTP_OPTIONS, .handler = ota_options_handler };
+    httpd_register_uri_handler(s_server, &uri_api_ota_opt);
 
     ESP_LOGI(TAG, "Web Dashboard running at http://%s.local/ or http://<ESP_IP>/", mdns_manager_get_hostname());
     return ESP_OK;
