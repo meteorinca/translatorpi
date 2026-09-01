@@ -32,7 +32,19 @@ import subprocess
 import threading
 from contextlib import contextmanager
 from pathlib import Path
+import sys
+import ctypes
 from collections import OrderedDict
+
+# Windows UCRT compatibility patch for moonshine-voice
+if sys.platform == "win32":
+    try:
+        import moonshine_voice.moonshine_api as _m_api
+        _m_api._libc = ctypes.CDLL("ucrtbase")
+        _m_api._libc.free.argtypes = [ctypes.c_void_p]
+        _m_api._libc.free.restype = None
+    except Exception:
+        pass
 
 # Multilingual STT via Moonshine.
 # Language is fixed at recognizer construction, so we lazily build (and cache) one

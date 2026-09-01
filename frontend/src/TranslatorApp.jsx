@@ -275,11 +275,11 @@ function TranslatorApp({ config, setConfig }) {
     const currentConfig = configRef.current
     const lane1Language =
       AVAILABLE_LANGUAGES[
-        languageIndexFor(currentConfig.lane1Language, lang1IndexRef.current)
+      languageIndexFor(currentConfig.lane1Language, lang1IndexRef.current)
       ]
     const lane2Language =
       AVAILABLE_LANGUAGES[
-        languageIndexFor(currentConfig.lane2Language, lang2IndexRef.current)
+      languageIndexFor(currentConfig.lane2Language, lang2IndexRef.current)
       ]
     const src =
       lane === 1
@@ -296,7 +296,7 @@ function TranslatorApp({ config, setConfig }) {
     })
     setTranslationData({
       target: `${dst.name} (Translation)`,
-      text: "Translating...",
+      text: "Translatng",
     })
     setMetaText("")
     setTiming({

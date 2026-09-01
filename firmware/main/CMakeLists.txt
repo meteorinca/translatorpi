@@ -1,0 +1,36 @@
+idf_component_register(
+    SRCS 
+        "main.c"
+        "wifi_manager.c"
+        "mdns_manager.c"
+        "time_sync.c"
+        "web_server.c"
+        "i2s_audio.c"
+        "oled_display.c"
+        "ws_client.c"
+        "button.c"
+        "led.c"
+        "state_machine.c"
+    INCLUDE_DIRS 
+        "."
+    REQUIRES 
+        esp_wifi
+        esp_event
+        nvs_flash
+        esp_websocket_client
+        esp_http_server
+        mdns
+        esp_netif
+        lwip
+        esp_driver_i2s
+        esp_driver_gpio
+        esp_driver_i2c
+        esp_driver_rmt
+        esp_driver_spi
+        esp_lcd
+        esp_ringbuf
+        led_strip
+        esp_adc
+        driver
+        json
+)
