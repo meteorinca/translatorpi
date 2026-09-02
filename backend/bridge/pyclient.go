@@ -72,7 +72,7 @@ func (c *MLClient) CallSTT(audio []float32, lang string) (string, error) {
 }
 
 // CallTranslate invokes the translation model from src to dst language.
-func (c *MLClient) CallTranslate(text, src, dst string) (string, error) {
+func (c *MLClient) CallTranslate(text, src, dst string) (string, string, error) {
 	formData := url.Values{
 		"text": {text},
 		"src":  {src},
@@ -82,26 +82,30 @@ func (c *MLClient) CallTranslate(text, src, dst string) (string, error) {
 	endpoint := fmt.Sprintf("%s/translate", c.baseURL)
 	resp, err := c.httpClient.PostForm(endpoint, formData)
 	if err != nil {
-		return "", fmt.Errorf("translate request failed: %w", err)
+		return "", "", fmt.Errorf("translate request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("translate error %d: %s", resp.StatusCode, string(body))
+		return "", "", fmt.Errorf("translate error %d: %s", resp.StatusCode, string(body))
 	}
 
 	var res struct {
 		Translation string `json:"translation"`
+		DisplayText string `json:"display_text,omitempty"`
 		Error       string `json:"error,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if res.Error != "" {
-		return "", fmt.Errorf("translate service error: %s", res.Error)
+		return "", "", fmt.Errorf("translate service error: %s", res.Error)
 	}
-	return res.Translation, nil
+	if res.DisplayText == "" {
+		res.DisplayText = res.Translation
+	}
+	return res.Translation, res.DisplayText, nil
 }
 
 // CallTTS synthesizes speech for the given text and returns raw 16kHz PCM16 bytes.

@@ -158,11 +158,8 @@ static void cycle_target_language(void)
     led_set_mode(LED_MODE_SWAP_FLASH);
     sound_play_chirp();
 
-    char disp_msg[48];
-    snprintf(disp_msg, sizeof(disp_msg), "EN -> %s\n%s",
-             s_dst_lang, s_target_languages[next_idx].name);
-    oled_display_show_text(disp_msg, NULL);
-    oled_display_update(DISPLAY_STATE_READY, s_src_lang, s_dst_lang, "Lang updated");
+    // Show what language to what on OLED: e.g. "EN -> ES\nSpanish"
+    oled_display_show_languages(s_src_lang, s_dst_lang, s_target_languages[next_idx].name);
 }
 
 static void set_languages_internal(const char *src, const char *dst)
@@ -177,11 +174,15 @@ static void set_languages_internal(const char *src, const char *dst)
     ws_client_send_text(buf);
 
     led_set_mode(LED_MODE_SWAP_FLASH);
-    oled_display_update(DISPLAY_STATE_READY, s_src_lang, s_dst_lang, "Lang updated");
 
-    char disp_msg[48];
-    snprintf(disp_msg, sizeof(disp_msg), "EN -> %s", s_dst_lang);
-    oled_display_show_text(disp_msg, NULL);
+    const char *target_name = s_dst_lang;
+    for (int i = 0; i < (int)NUM_TARGET_LANGUAGES; i++) {
+        if (strcasecmp(s_dst_lang, s_target_languages[i].code) == 0) {
+            target_name = s_target_languages[i].name;
+            break;
+        }
+    }
+    oled_display_show_languages(s_src_lang, s_dst_lang, target_name);
 }
 
 static void start_recording(void)
@@ -226,9 +227,12 @@ static void state_task(void *arg)
             switch (ev.type) {
             case EV_WIFI_STATE_CHANGED:
                 if (ev.bool_val) {
-                    oled_display_update(DISPLAY_STATE_CONNECTING_WS, s_src_lang, s_dst_lang, "Connecting Host...");
+                    // Connected to WiFi but waiting for bridge: show animated red eyes!
+                    oled_display_set_eye_color(EYE_COLOR_RED);
+                    oled_display_clear(); // Reveal eyes immediately
                     led_set_mode(LED_MODE_CONNECTING);
                 } else {
+                    oled_display_set_eye_color(EYE_COLOR_NORMAL);
                     oled_display_update(DISPLAY_STATE_CONNECTING_WIFI, s_src_lang, s_dst_lang, "Connecting WiFi...");
                     led_set_mode(LED_MODE_CONNECTING);
                 }
@@ -236,14 +240,19 @@ static void state_task(void *arg)
 
             case EV_WS_STATE_CHANGED:
                 if (ev.bool_val) {
+                    // Connected to bridge: play sound YES and eyes go back to normal!
                     s_state = SM_STATE_IDLE;
                     led_set_mode(LED_MODE_IDLE);
+                    oled_display_set_eye_color(EYE_COLOR_NORMAL);
                     oled_display_update(DISPLAY_STATE_READY, s_src_lang, s_dst_lang, "Ready");
+                    sound_play_yes();
                     ws_client_send_hello(DEVICE_NAME_STR, s_src_lang, s_dst_lang);
                 } else {
                     s_state = SM_STATE_WS_CONNECTING;
                     led_set_mode(LED_MODE_CONNECTING);
-                    oled_display_update(DISPLAY_STATE_CONNECTING_WS, s_src_lang, s_dst_lang, "Host disconnected");
+                    // Disconnected from bridge: eyes turn red
+                    oled_display_set_eye_color(EYE_COLOR_RED);
+                    oled_display_clear();
                 }
                 break;
 
@@ -410,7 +419,7 @@ void state_machine_on_ws_text(const ws_msg_t *msg)
         };
         xQueueSend(s_event_queue, &ev, 0);
     } else if (strcmp(msg->type, "translation") == 0) {
-        const char *trans_str = msg->translation ? msg->translation : msg->text;
+        const char *trans_str = (msg->display_text && strlen(msg->display_text)) ? msg->display_text : (msg->translation ? msg->translation : msg->text);
         sm_event_t ev = {
             .type = EV_SERVER_TRANSLATION,
             .str_val1 = trans_str ? strdup(trans_str) : NULL,

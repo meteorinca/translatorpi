@@ -71,9 +71,9 @@ def resample_linear(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarr
     return np.interp(target_indices, orig_indices, audio).astype(audio.dtype)
 
 
-async def translate_text(text: str, src: str, dst: str) -> str:
+async def translate_text(text: str, src: str, dst: str) -> tuple[str, str]:
     if not text.strip():
-        return ""
+        return "", ""
 
     src_name = LANGUAGE_LABELS.get(src, src)
     dst_name = LANGUAGE_LABELS.get(dst, dst)
@@ -102,11 +102,35 @@ async def translate_text(text: str, src: str, dst: str) -> str:
                     content = res_json["choices"][0]["message"]["content"].strip()
                     if (content.startswith('"') and content.endswith('"')) or (content.startswith("'") and content.endswith("'")):
                         content = content[1:-1].strip()
-                    return content
+                    return content, content
         except Exception as e:
             print(f"[WS Bridge] LLM translate warning: {e}")
 
-    # 2. Try online translation fallback (MyMemory API)
+    # 2. Try Google GTX API with romanization (&dt=rm)
+    try:
+        import urllib.parse
+        import httpx
+        sl = GT_LANG_MAP.get(src, src)
+        tl = GT_LANG_MAP.get(dst, dst)
+        q = urllib.parse.quote(text)
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={sl}&tl={tl}&dt=t&dt=rm&q={q}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        async with httpx.AsyncClient(timeout=3.5) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                translated = "".join(segment[0] for segment in data[0] if segment and segment[0])
+                display_text = None
+                for segment in data[0]:
+                    if len(segment) >= 3 and segment[2] and isinstance(segment[2], str):
+                        display_text = segment[2].strip()
+                        break
+                if translated.strip():
+                    return translated.strip(), display_text or translated.strip()
+    except Exception as e:
+        print(f"[WS Bridge] Google GTX translate warning: {e}")
+
+    # 3. Try online translation fallback (MyMemory API)
     try:
         import urllib.parse
         import httpx
@@ -120,11 +144,11 @@ async def translate_text(text: str, src: str, dst: str) -> str:
                 data = resp.json()
                 trans = data.get("responseData", {}).get("translatedText", "").strip()
                 if trans and trans.lower() != text.lower() and "MYMEMORY WARNING" not in trans:
-                    return trans
+                    return trans, trans
     except Exception as e:
         print(f"[WS Bridge] Online translate warning: {e}")
 
-    return text
+    return text, text
 
 
 async def process_utterance(websocket, pcm_bytes: bytes, src: str, dst: str):
@@ -156,12 +180,13 @@ async def process_utterance(websocket, pcm_bytes: bytes, src: str, dst: str):
 
     # 2. Translate
     await websocket.send(json.dumps({"type": "status", "state": "translating", "message": "Translating..."}))
-    translation = await translate_text(stt_text, src, dst)
-    print(f"[WS Bridge] Translation: '{translation}'")
+    translation, display_text = await translate_text(stt_text, src, dst)
+    print(f"[WS Bridge] Translation: '{translation}' (display: '{display_text}')")
     await websocket.send(json.dumps({
         "type": "translation",
         "text": translation,
         "translation": translation,
+        "display_text": display_text,
     }))
 
     # 3. TTS

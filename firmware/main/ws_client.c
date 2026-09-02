@@ -39,6 +39,9 @@ static void parse_and_dispatch_json(const char *json_data, size_t len)
     cJSON *trans_item = cJSON_GetObjectItem(root, "translation");
     if (cJSON_IsString(trans_item)) msg.translation = trans_item->valuestring;
 
+    cJSON *disp_item = cJSON_GetObjectItem(root, "display_text");
+    if (cJSON_IsString(disp_item)) msg.display_text = disp_item->valuestring;
+
     cJSON *msg_item = cJSON_GetObjectItem(root, "message");
     if (cJSON_IsString(msg_item)) msg.message = msg_item->valuestring;
 

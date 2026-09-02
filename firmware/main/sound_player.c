@@ -1,6 +1,7 @@
 #include "sound_player.h"
 #include "i2s_audio.h"
 #include "dogbark_audio_8bit.h"
+#include "yes_audio_8bit.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
@@ -91,11 +92,19 @@ void sound_play_chirp(void)
     i2s_audio_clear_buffers();
 }
 
+void sound_play_yes(void)
+{
+    ESP_LOGI(TAG, "Playing YES sound (%d bytes)...", (int)yes_audio_8bit_len);
+    sound_play_8bit(yes_audio_8bit, yes_audio_8bit_len);
+}
+
 void sound_play_named(const char *name)
 {
     if (!name) return;
     if (strcmp(name, "bark") == 0) {
         sound_play_bark();
+    } else if (strcmp(name, "yes") == 0) {
+        sound_play_yes();
     } else if (strcmp(name, "boot") == 0) {
         sound_play_boot();
     } else if (strcmp(name, "chirp") == 0 || strcmp(name, "ding") == 0) {

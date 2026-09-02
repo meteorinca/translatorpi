@@ -10,6 +10,7 @@ typedef struct {
     char *state;
     char *text;
     char *translation;
+    char *display_text;
     char *message;
     int rate;
     int len;

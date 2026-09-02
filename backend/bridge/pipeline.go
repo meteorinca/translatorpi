@@ -69,7 +69,7 @@ func (p *PipelineRunner) Run(audioPCM []byte, src, dst string, conn *websocket.C
 
 	// Step 2: Translation
 	writeJSON(ServerMsg{Type: "status", State: "translating", Message: "Translating..."})
-	translatedText, err := p.mlClient.CallTranslate(sttText, src, dst)
+	translatedText, displayText, err := p.mlClient.CallTranslate(sttText, src, dst)
 	if err != nil {
 		log.Printf("[pipeline] Translation error: %v", err)
 		writeJSON(ServerMsg{Type: "error", Message: "Translate error: " + err.Error()})
@@ -78,11 +78,12 @@ func (p *PipelineRunner) Run(audioPCM []byte, src, dst string, conn *websocket.C
 		return
 	}
 
-	log.Printf("[pipeline] Translation result: \"%s\"", translatedText)
+	log.Printf("[pipeline] Translation result: \"%s\" (display: \"%s\")", translatedText, displayText)
 	writeJSON(ServerMsg{
 		Type:        "translation",
 		Text:        translatedText,
 		Translation: translatedText,
+		DisplayText: displayText,
 	})
 
 	// Step 3: TTS

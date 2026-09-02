@@ -23,6 +23,7 @@ type ServerMsg struct {
 	State       string `json:"state,omitempty"`       // "ready", "recording", "transcribing", "translating", "synthesizing", "speaking", "idle", "error"
 	Text        string `json:"text,omitempty"`        // Recognized STT text
 	Translation string `json:"translation,omitempty"` // Translated target text
+	DisplayText string `json:"display_text,omitempty"`// Display transliteration for OLED
 	Len         int    `json:"len,omitempty"`         // Next binary payload byte length
 	Rate        int    `json:"rate,omitempty"`        // Audio sample rate (16000)
 	Message     string `json:"message,omitempty"`     // Informational or error text

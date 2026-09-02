@@ -186,9 +186,31 @@ async def translate_via_llm(text: str, src: str, dst: str) -> Optional[str]:
     return None
 
 
-async def translate_via_online(text: str, src: str, dst: str) -> Optional[str]:
-    """Free, fast online translation fallback (MyMemory API with Google fallback)."""
-    # 1. Try MyMemory API
+async def translate_via_online(text: str, src: str, dst: str) -> tuple[Optional[str], Optional[str]]:
+    """Free, fast online translation fallback with romanization / display_text support."""
+    # 1. Try Google GTX API with romanization enabled (&dt=rm)
+    try:
+        sl = GT_LANG_MAP.get(src, src)
+        tl = GT_LANG_MAP.get(dst, dst)
+        q = urllib.parse.quote(text)
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={sl}&tl={tl}&dt=t&dt=rm&q={q}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        async with httpx.AsyncClient(timeout=3.5) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                translated = "".join(segment[0] for segment in data[0] if segment and segment[0])
+                display_text = None
+                for segment in data[0]:
+                    if len(segment) >= 3 and segment[2] and isinstance(segment[2], str):
+                        display_text = segment[2].strip()
+                        break
+                if translated.strip():
+                    return translated.strip(), display_text or translated.strip()
+    except Exception as e:
+        print(f"[ML-Translate Warning] Google API error: {e}")
+
+    # 2. Try MyMemory API
     try:
         q = urllib.parse.quote(text)
         pair = f"{src}|{dst}"
@@ -200,28 +222,11 @@ async def translate_via_online(text: str, src: str, dst: str) -> Optional[str]:
                 data = resp.json()
                 trans = data.get("responseData", {}).get("translatedText", "").strip()
                 if trans and trans.lower() != text.lower() and "MYMEMORY WARNING" not in trans:
-                    return trans
+                    return trans, trans
     except Exception as e:
         print(f"[ML-Translate Warning] MyMemory fallback error: {e}")
 
-    # 2. Try Google GTX API
-    try:
-        sl = GT_LANG_MAP.get(src, src)
-        tl = GT_LANG_MAP.get(dst, dst)
-        q = urllib.parse.quote(text)
-        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={sl}&tl={tl}&dt=t&q={q}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                translated = "".join(segment[0] for segment in data[0] if segment and segment[0])
-                if translated.strip():
-                    return translated.strip()
-    except Exception as e:
-        print(f"[ML-Translate Warning] Google fallback error: {e}")
-
-    return None
+    return None, None
 
 
 @app.post("/translate")
@@ -237,23 +242,23 @@ async def translate(
     3. Falls back to original text.
     """
     if not text.strip():
-        return {"translation": ""}
+        return {"translation": "", "display_text": ""}
 
     # 1. Try local LLM
     translated = await translate_via_llm(text, src, dst)
     if translated:
         print(f"[ML-Translate (LLM)] ({src}->{dst}) '{text}' => '{translated}'")
-        return {"translation": translated}
+        return {"translation": translated, "display_text": translated}
 
-    # 2. Try online translation
-    translated = await translate_via_online(text, src, dst)
+    # 2. Try online translation (with romanization)
+    translated, display_text = await translate_via_online(text, src, dst)
     if translated:
-        print(f"[ML-Translate (Online)] ({src}->{dst}) '{text}' => '{translated}'")
-        return {"translation": translated}
+        print(f"[ML-Translate (Online)] ({src}->{dst}) '{text}' => '{translated}' (display: '{display_text}')")
+        return {"translation": translated, "display_text": display_text or translated}
 
     # 3. Fallback to original text
     print(f"[ML-Translate (Fallback)] ({src}->{dst}) '{text}' => '{text}'")
-    return {"translation": text}
+    return {"translation": text, "display_text": text}
 
 
 @app.post("/tts")
